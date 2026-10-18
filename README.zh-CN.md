@@ -2,9 +2,11 @@
 
 **Say it. Make it. — 说出想法，剪出作品。**
 
-[English](README.md) · [观看 58 秒宣传片](docs/media/TadaCut-promo.mp4)
+[English](README.md) · [观看 58 秒宣传片](https://github.com/user-attachments/assets/3fb94ead-1fb3-471c-b1a0-4ea5ab4beb8a)
 
-[![TadaCut 宣传片封面](docs/media/cover.png)](docs/media/TadaCut-promo.mp4)
+https://github.com/user-attachments/assets/3fb94ead-1fb3-471c-b1a0-4ea5ab4beb8a
+
+[下载宣传片](https://github.com/zheflow/TadaCut/raw/refs/heads/main/docs/media/TadaCut-promo.mp4) · 720p · 4.3 MB
 
 一个由 TypeScript 编写的本地视频创作工作室：把故事、素材、时间线、自选模型与应用录制放在同一个项目里。界面和业务代码共用于 macOS / Windows，桌面宿主使用 Electron。
 
@@ -90,7 +92,7 @@ node scripts/smoke-ui.mjs
 
 ## 宣传片
 
-`promo/` 是一支 58 秒的宣传片（1920 × 1080，60 FPS），画面、动画和配乐全部由代码生成：Remotion 组件呈现应用工作台界面；示例项目“城市漫游”的四个镜头（晨光城市、山脊、暮色河面、夜路）是 `promo/src/art.tsx` 中的分层 SVG 插画，应用内的示例素材也由同一份代码导出；配乐在 `promo/audio` 中逐个采样合成，画面与声音共用 `promo/src/timeline.ts` 的节拍表。
+README 使用 4.3 MB 的 720p / 30 FPS 版本，可直接播放。`promo/` 生成 58 秒的高清原片（1920 × 1080，60 FPS），画面、动画和配乐全部由代码生成：Remotion 组件呈现应用工作台界面；示例项目“城市漫游”的四个镜头（晨光城市、山脊、暮色河面、夜路）是 `promo/src/art.tsx` 中的分层 SVG 插画，应用内的示例素材也由同一份代码导出；配乐在 `promo/audio` 中逐个采样合成，画面与声音共用 `promo/src/timeline.ts` 的节拍表。
 
 ```sh
 npm run promo                       # 输出 output/promo/TadaCut-promo.mp4 与 cover.png

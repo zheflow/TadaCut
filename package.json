@@ -114,6 +114,15 @@
       "icon": "build/icon.png",
       "identity": "-",
       "files": [
+        "dist/**",
+        "apps/studio/dist/**",
+        "packages/render/**",
+        "package.json",
+        "!dist/render/public/onnx/**",
+        "!dist/**/*.map",
+        "!**/node_modules/**/*.map",
+        "!**/node_modules/**/*.d.ts",
+        "!**/node_modules/**/*.md",
         "!node_modules/@ffmpeg-installer/**",
         "!node_modules/@ffprobe-installer/**"
       ],
