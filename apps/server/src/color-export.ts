@@ -303,12 +303,10 @@ export async function exportManagedColor(
           )
         ).stdout.toString(),
       );
-      if (
-        !probe.streams.some(
-          (s: { codec_type: string }) => s.codec_type === "audio",
-        )
-      )
-        continue;
+      const audio = probe.streams.find(
+        (s: { codec_type: string }) => s.codec_type === "audio",
+      );
+      if (!audio) continue;
       inputs.push(
         "-ss",
         String(
@@ -334,16 +332,22 @@ export async function exportManagedColor(
       }
       const changes = path.join(temp, `gain-${inputIndex}.txt`);
       await fs.writeFile(changes, commands.join("\n"));
+      const delays = Array.from(
+        { length: Math.max(1, Number(audio.channels) || 1) },
+        () => Math.round(((begin - lo) / timeline.fps) * 1000),
+      ).join("|");
       graph.push(
-        `[${inputIndex}:a]asetpts=PTS-STARTPTS,${tempoFilters(voice.rate)},asendcmd=f='${escaped(changes)}',volume@gain${inputIndex}=1,adelay=${Math.round(((begin - lo) / timeline.fps) * 1000)}:all=1[a${inputIndex}]`,
+        `[${inputIndex}:a]asetpts=PTS-STARTPTS,${tempoFilters(voice.rate)},asendcmd=f='${escaped(changes)}',volume@gain${inputIndex}=1,adelay=${delays},apad,atrim=duration=${(hi - lo) / timeline.fps}[a${inputIndex}]`,
       );
       labels.push(`[a${inputIndex}]`);
       inputIndex++;
     }
     const filename = `TadaCut-${project.revision}-${profile.outputSpace}.${options.codec === "prores" ? "mov" : "mp4"}`;
+    // All voices span the full output (with silence), so amix always divides
+    // by the same input count. Restore their sum without the newer normalize option.
     if (labels.length)
       graph.push(
-        `${labels.join("")}amix=inputs=${labels.length}:normalize=0,apad,atrim=duration=${(hi - lo) / timeline.fps}[mix]`,
+        `${labels.join("")}amix=inputs=${labels.length}:dropout_transition=0,volume=${labels.length},atrim=duration=${(hi - lo) / timeline.fps}[mix]`,
       );
     const filterFile = path.join(temp, "mix.txt");
     if (graph.length) await fs.writeFile(filterFile, graph.join(";"));

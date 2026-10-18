@@ -241,6 +241,21 @@ describe("advanced media and conversation API", () => {
     expect(probe.streams[0].pix_fmt).toContain("10");
     const p = server.repo.get(projectId),
       t = activeTimeline(p);
+    // The second voice stops halfway through: the remaining voice must keep its gain.
+    const mixTrack = newTrack(t, "audio", "mix-track");
+    t.tracks.push(mixTrack);
+    p.assets.push(
+      assetSchema.parse({ ...p.assets[0], id: "mix-audio", kind: "audio" }),
+    );
+    t.clips.push(
+      clipSchema.parse({
+        id: "mix-clip",
+        assetId: "mix-audio",
+        trackId: mixTrack.id,
+        start: 0,
+        duration: t.fps,
+      }),
+    );
     t.profile = timelineProfileSchema.parse({
       rate: { numerator: 12, denominator: 1 },
       workingSpace: "rec2020-pq",
@@ -269,6 +284,29 @@ describe("advanced media and conversation API", () => {
       true,
     );
     expect(Number(actual.format.duration)).toBeCloseTo(2, 1);
+    const { stdout: samples } = await runProcess(mediaBinary("ffmpeg")!, [
+      "-v",
+      "error",
+      "-i",
+      path.join(output, result.filename),
+      "-vn",
+      "-ac",
+      "1",
+      "-ar",
+      "48000",
+      "-f",
+      "s16le",
+      "pipe:1",
+    ]);
+    const rms = (start: number, end: number) => {
+      let sum = 0;
+      for (let i = start * 48000; i < end * 48000; i++)
+        sum += samples.readInt16LE(i * 2) ** 2;
+      return Math.sqrt(sum / ((end - start) * 48000));
+    };
+    const sourceRms = 10000 / Math.sqrt(2);
+    expect(rms(0.25, 0.75) / sourceRms).toBeCloseTo(2, 1);
+    expect(rms(1.25, 1.75) / sourceRms).toBeCloseTo(1, 1);
   }, 30000);
   it("keeps manual processing results in the draft and rejects changes made after processing", async () => {
     const job = await processFixture({ type: "reverse" });

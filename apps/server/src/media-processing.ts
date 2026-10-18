@@ -806,20 +806,6 @@ async function processMedia(
             operation.peakNits,
           ),
         );
-        const hdr = operation.output.startsWith("rec2020"),
-          matrix = hdr ? "bt2020nc" : "bt709",
-          trc =
-            operation.output === "rec2020-pq"
-              ? "smpte2084"
-              : operation.output === "rec2020-hlg"
-                ? "arib-std-b67"
-                : operation.output === "srgb"
-                  ? "iec61966-2-1"
-                  : "bt709";
-        const escaped = cube
-          .replace(/\\/g, "\\\\")
-          .replace(/:/g, "\\:")
-          .replace(/'/g, "\\'");
         await runProcess(
           binary,
           [
@@ -837,17 +823,12 @@ async function processMedia(
             "-i",
             base,
             "-vf",
-            `setpts=(PTS-STARTPTS)/${clip?.speed ?? 1},fps=${timeline.fps},scale=in_color_matrix=${operation.input.startsWith("rec2020") ? "bt2020" : "bt709"}:out_range=full,format=gbrpf32le,lut3d=file='${escaped}':interp=tetrahedral,scale=out_color_matrix=${hdr ? "bt2020" : "bt709"}:out_range=tv,format=yuv444p10le,setparams=color_primaries=${hdr ? "bt2020" : "bt709"}:color_trc=${trc}:colorspace=${matrix}`,
+            `setpts=(PTS-STARTPTS)/${clip?.speed ?? 1},fps=${timeline.fps},${conversionFilter(operation.input, operation.output, cube)}`,
             "-c:v",
             "prores_ks",
             "-profile:v",
             "3",
-            "-color_primaries",
-            hdr ? "bt2020" : "bt709",
-            "-color_trc",
-            trc,
-            "-colorspace",
-            matrix,
+            ...colorTags(operation.output),
             ...(hasAudio
               ? ["-af", tempoFilters(clip?.speed ?? 1), "-c:a", "pcm_s16le"]
               : []),
