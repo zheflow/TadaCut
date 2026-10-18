@@ -1,0 +1,10 @@
+node_modules
+dist
+apps/studio/dist
+apps/studio/public/motion-runtime.js
+release
+build
+evidence
+.dev-data
+.desktop-test-data
+package-lock.json

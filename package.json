@@ -1,0 +1,187 @@
+{
+  "name": "tadacut",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "An AI video studio on your computer. Say it. Make it.",
+  "main": "dist/desktop/main.mjs",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "tsx watch apps/server/src/main.ts",
+    "dev:studio": "vite --config apps/studio/vite.config.ts",
+    "build:motion": "node scripts/build-motion.mjs",
+    "build": "node scripts/build.mjs",
+    "start": "node dist/server/main.mjs",
+    "desktop": "npm run build && electron .",
+    "desktop:launch": "electron .",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "verify": "npm run check && npm test && npm run build",
+    "package:mac": "npm run build && node scripts/build-browser.mjs && node scripts/build-ffmpeg.mjs && electron-builder --mac --arm64 --publish never",
+    "package:win": "npm run build && node scripts/build-browser.mjs && electron-builder --win --x64 --publish never",
+    "format": "prettier --write apps packages promo scripts tests docs README.md README.zh-CN.md CONTRIBUTING.md",
+    "format:check": "prettier --check apps packages promo scripts tests docs README.md README.zh-CN.md CONTRIBUTING.md",
+    "test:ui": "node scripts/smoke-ui.mjs",
+    "promo": "tsx promo/render.ts",
+    "sample-art": "tsx promo/sample-art.ts && prettier --write apps/server/src/sample-art.ts",
+    "test:shaders": "node --experimental-strip-types scripts/verify-shaders.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/multipart": "^9.3.0",
+    "@fastify/static": "10.1.6",
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@remotion/renderer": "4.0.535",
+    "fast-xml-parser": "^5.3.0",
+    "fastify": "^5.6.2",
+    "fflate": "^0.8.2",
+    "playwright-core": "^1.55.1",
+    "react": "19.3.0",
+    "remotion": "4.0.535",
+    "sharp": "0.35.5",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@babel/standalone": "^7.28.4",
+    "@huggingface/transformers": "4.3.1",
+    "@remotion/bundler": "4.0.535",
+    "@types/babel__standalone": "^7.1.9",
+    "@types/node": "^22.18.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "electron": "44.7.0",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.10",
+    "lucide-react": "^0.468.0",
+    "prettier": "3.6.2",
+    "react-dom": "19.3.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vite": "7.3.7",
+    "vitest": "5.0.4"
+  },
+  "build": {
+    "appId": "studio.tadacut.app",
+    "productName": "TadaCut",
+    "files": [
+      "dist/**",
+      "apps/studio/dist/**",
+      "packages/render/**",
+      "package.json",
+      "!dist/render/public/onnx/**",
+      "!dist/**/*.map",
+      "!**/node_modules/**/*.map",
+      "!**/node_modules/**/*.d.ts",
+      "!**/node_modules/**/*.md"
+    ],
+    "asarUnpack": [
+      "node_modules/@remotion/**",
+      "node_modules/playwright-core/**",
+      "node_modules/@ffmpeg-installer/**",
+      "node_modules/@ffprobe-installer/**",
+      "node_modules/@nut-tree-fork/**",
+      "node_modules/@github/**",
+      "node_modules/@tadacut/**",
+      "node_modules/capcut-cli/**",
+      "node_modules/sharp/**",
+      "node_modules/@img/**"
+    ],
+    "mac": {
+      "category": "public.app-category.video",
+      "target": [
+        "dir",
+        "dmg"
+      ],
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Record voiceovers for your project.",
+        "NSAudioCaptureUsageDescription": "Include application audio in your recordings.",
+        "NSScreenCaptureUsageDescription": "Record a screen or application selected by you.",
+        "NSAppleEventsUsageDescription": "Operate applications in an automation session started by you."
+      },
+      "icon": "build/icon.png",
+      "identity": "-",
+      "files": [
+        "!node_modules/@ffmpeg-installer/**",
+        "!node_modules/@ffprobe-installer/**"
+      ],
+      "extraResources": [
+        {
+          "from": "build/ffmpeg",
+          "to": "ffmpeg"
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "TadaCut-${version}-${arch}.${ext}",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "directories": {
+      "output": "release"
+    },
+    "artifactName": "TadaCut-${version}-${os}-${arch}.${ext}",
+    "dmg": {
+      "background": "build/dmg-background.png",
+      "window": {
+        "width": 660,
+        "height": 440
+      },
+      "contents": [
+        {
+          "x": 180,
+          "y": 235,
+          "type": "file"
+        },
+        {
+          "x": 480,
+          "y": 235,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "format": "UDBZ"
+    },
+    "extraResources": [
+      {
+        "from": "build/render-browser",
+        "to": "render-browser"
+      }
+    ],
+    "electronLanguages": [
+      "zh_CN",
+      "zh_TW",
+      "en"
+    ]
+  },
+  "optionalDependencies": {
+    "@github/copilot-sdk": "1.0.20",
+    "@nut-tree-fork/nut-js": "4.2.6",
+    "capcut-cli": "^0.29.0"
+  },
+  "author": "zheflow",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zheflow/TadaCut.git"
+  },
+  "homepage": "https://github.com/zheflow/TadaCut",
+  "bugs": {
+    "url": "https://github.com/zheflow/TadaCut/issues"
+  },
+  "packageManager": "npm@10.9.4"
+}

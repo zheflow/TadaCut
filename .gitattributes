@@ -1,0 +1,16 @@
+/node_modules export-ignore
+/dist export-ignore
+/apps/studio/dist export-ignore
+/apps/studio/public/motion-runtime.js export-ignore
+/build export-ignore
+/release export-ignore
+/output export-ignore
+/evidence export-ignore
+/.tadacut export-ignore
+/.dev-data export-ignore
+/.desktop-test-data export-ignore
+/.packaged-test-data export-ignore
+/.env export-ignore
+/.env.* export-ignore
+/.env.example -export-ignore
+**/.DS_Store export-ignore
