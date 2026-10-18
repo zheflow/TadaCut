@@ -35,7 +35,9 @@ export function colorTags(space: string) {
   ];
 }
 export function conversionFilter(input: string, output: string, cube: string) {
-  return `scale=in_color_matrix=${input.startsWith("rec2020") ? "bt2020" : "bt709"}:out_range=full,format=gbrpf32le,lut3d=file='${escaped(cube)}':interp=tetrahedral,scale=out_color_matrix=${output.startsWith("rec2020") ? "bt2020" : "bt709"}:out_range=tv,format=yuv444p10le,setparams=color_primaries=${output.startsWith("rec2020") ? "bt2020" : "bt709"}:color_trc=${output === "rec2020-pq" ? "smpte2084" : output === "rec2020-hlg" ? "arib-std-b67" : output === "srgb" ? "iec61966-2-1" : "bt709"}:colorspace=${output.startsWith("rec2020") ? "bt2020nc" : "bt709"}`;
+  // Keep 16-bit RGB between the LUT and scales: older bundled FFmpeg builds
+  // cannot negotiate floating-point RGB with swscale. The output stays 10-bit.
+  return `scale=in_color_matrix=${input.startsWith("rec2020") ? "bt2020" : "bt709"}:out_range=full,format=gbrp16le,lut3d=file='${escaped(cube)}':interp=tetrahedral,scale=out_color_matrix=${output.startsWith("rec2020") ? "bt2020" : "bt709"}:out_range=tv,format=yuv444p10le,setparams=color_primaries=${output.startsWith("rec2020") ? "bt2020" : "bt709"}:color_trc=${output === "rec2020-pq" ? "smpte2084" : output === "rec2020-hlg" ? "arib-std-b67" : output === "srgb" ? "iec61966-2-1" : "bt709"}:colorspace=${output.startsWith("rec2020") ? "bt2020nc" : "bt709"}`;
 }
 export async function exportManagedColor(
   options: Parameters<typeof exportMedia>[0] & {
