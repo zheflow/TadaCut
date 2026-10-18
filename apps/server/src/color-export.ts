@@ -20,6 +20,9 @@ const escaped = (file: string) =>
   file.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'");
 export function colorTags(space: string) {
   return [
+    // These outputs use MOV/MP4. Older muxers need an explicit color atom.
+    "-movflags",
+    "+write_colr",
     "-color_primaries",
     space.startsWith("rec2020") ? "bt2020" : "bt709",
     "-color_trc",
