@@ -1,3 +1,4 @@
+import { advancedShader, needsAdvancedPass } from "../advanced-gl";
 import { useEffect, useMemo, useRef } from "react";
 import {
   effectParams,
@@ -146,7 +147,7 @@ export function EffectCanvas({
     };
     type Pass = {
       program: WebGLProgram;
-      kind: "preset" | "grade" | "custom" | "transition" | "copy";
+      kind: "preset" | "grade" | "advanced" | "custom" | "transition" | "copy";
       index?: number;
     };
     const passes: Pass[] = [],
@@ -193,6 +194,11 @@ export function EffectCanvas({
         });
         if (needsGrade(clip.effects))
           passes.push({ program: link(gradeSource), kind: "grade" });
+        if (needsAdvancedPass(clip.advanced))
+          passes.push({
+            program: link(advancedShader(clip.advanced!)),
+            kind: "advanced",
+          });
         if (clip.effects.shader)
           passes.push({ program: link(clip.effects.shader), kind: "custom" });
         if (transitionSource)
@@ -427,6 +433,7 @@ export function EffectCanvas({
     };
   }, [
     asset.url,
+    JSON.stringify(clip.advanced),
     chain,
     transitionSource,
     clip.effects.shader,

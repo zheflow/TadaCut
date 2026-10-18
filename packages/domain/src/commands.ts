@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { canvasNodeSchema, timelineProfileSchema } from "./advanced-model";
 import {
   assetSchema,
   brandSchema,
@@ -25,6 +26,32 @@ const clipPatch = clipSchema.partial().omit({ id: true });
 export const commandSchema = z.discriminatedUnion("type", [
   z
     .object({
+      type: z.literal("project.assert"),
+      dependencies: z
+        .array(
+          z
+            .object({
+              kind: z.enum(["clip", "asset", "timeline", "timeline-content"]),
+              id,
+              timelineId: id.optional(),
+              value: z.string().max(1000000),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(500),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("timeline.profile"),
+      timelineId: id,
+      profile: timelineProfileSchema,
+      preserveTime: z.boolean().default(true),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal("project.rename"),
       name: z.string().min(1).max(200),
     })
@@ -32,6 +59,7 @@ export const commandSchema = z.discriminatedUnion("type", [
   z
     .object({ type: z.literal("project.archive"), archived: z.boolean() })
     .strict(),
+  z.object({ type: z.literal("asset.proxy.clear"), assetId: id }).strict(),
   z.object({ type: z.literal("asset.add"), asset: assetSchema }).strict(),
   z
     .object({
@@ -192,14 +220,7 @@ export const commandSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("canvas.upsert"),
-      node: z.object({
-        id,
-        kind: z.enum(["note", "asset", "entity", "shot"]),
-        x: z.number(),
-        y: z.number(),
-        label: z.string(),
-        referenceId: z.string().optional(),
-      }),
+      node: canvasNodeSchema,
     })
     .strict(),
   z.object({ type: z.literal("canvas.remove"), nodeId: id }).strict(),

@@ -7,6 +7,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { AgentTool } from "../../../packages/agent/src/runner";
+import { modelToolResult } from "../../../packages/agent/src/output";
 
 /** One short-lived connection exposes only the tools bound to this app run. */
 export async function serveExternalTools(
@@ -60,23 +61,11 @@ export async function serveExternalTools(
           const tool = tools.find((tool) => tool.name === params.name);
           if (!tool) throw new Error("工具不在本轮授权目录中");
           const output = await tool.execute(params.arguments ?? {});
-          const imageOutput =
-            output && typeof output === "object" && !Array.isArray(output)
-              ? (output as Record<string, unknown>)
-              : {};
-          const { _image, _images, ...plain } = imageOutput;
-          const value =
-            output && typeof output === "object" && !Array.isArray(output)
-              ? plain
-              : output;
-          const images = [
-            ...(_image ? [_image] : []),
-            ...(Array.isArray(_images) ? _images : []),
-          ].filter((image): image is string => typeof image === "string");
+          const result = modelToolResult(output);
           return {
             content: [
-              { type: "text", text: JSON.stringify(value ?? null) },
-              ...images.map((image) => {
+              { type: "text", text: result.text },
+              ...result.images.map((image) => {
                 const match = /^data:([^;]+);base64,(.*)$/.exec(image);
                 return {
                   type: "image",

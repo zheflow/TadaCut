@@ -9,6 +9,7 @@ import {
   History,
   LoaderCircle,
   Plus,
+  Pencil,
   Puzzle,
   Send,
   ShieldCheck,
@@ -136,6 +137,27 @@ export function AgentSettingsSection() {
         />
         完成修改后让助手对照需求自查一遍
       </label>
+      <label className="field-label">
+        应用上下文预算（估算 tokens）
+        <input
+          key={settings.inputBudget}
+          type="number"
+          aria-label="上下文预算"
+          min={8000}
+          max={64000}
+          step={1000}
+          defaultValue={settings.inputBudget}
+          onBlur={(e) => {
+            const value = Number(e.currentTarget.value);
+            if (value !== settings.inputBudget)
+              void save({ inputBudget: value });
+          }}
+        />
+      </label>
+      <p>
+        默认 24,000，包含系统提示、技能、工具定义和消息；CLI
+        内部的压缩由运行时管理。
+      </p>
       <label className="checkbox-label">
         <input
           type="checkbox"
@@ -149,6 +171,11 @@ export function AgentSettingsSection() {
 }
 export function MemoriesSection() {
   const p = useStudio((s) => s.project);
+  const [query, setQuery] = useState("");
+  const matches = (m: { text: string; tags: string[] }) =>
+    `${m.text} ${m.tags.join(" ")}`
+      .toLowerCase()
+      .includes(query.trim().toLowerCase());
   const memories = useRemote<GlobalMemory[]>("/api/memories", "memories", []),
     candidates = useRemote<MemoryCandidate[]>(
       "/api/memory-candidates",
@@ -156,11 +183,18 @@ export function MemoriesSection() {
       [],
     );
   return (
-    <section className="settings-section">
+    <section className="settings-section" id="agent-memories">
       <h2>记忆</h2>
       <p>
         长期偏好用于所有项目；项目约定只对当前项目有效。随时可以编辑和删除。
       </p>
+      <input
+        className="search-input"
+        aria-label="搜索记忆"
+        placeholder="搜索长期偏好与项目约定"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
       {(candidates.value ?? []).length > 0 && (
         <div className="memory-candidates">
           <h3>助手发现的偏好</h3>
@@ -202,7 +236,7 @@ export function MemoriesSection() {
         </div>
       )}
       <h3>长期偏好</h3>
-      {(memories.value ?? []).map((m) => (
+      {(memories.value ?? []).filter(matches).map((m) => (
         <div className="memory-card" key={m.id}>
           <div>
             {m.text}
@@ -215,6 +249,23 @@ export function MemoriesSection() {
               {m.tags.length ? ` · ${m.tags.join(" · ")}` : ""}
             </small>
           </div>
+          <button
+            className="icon-button"
+            title="编辑长期偏好"
+            onClick={async () => {
+              const text = await askText("编辑长期偏好", m.text, true);
+              if (text?.trim())
+                await post("/api/memories", {
+                  id: m.id,
+                  text: text.trim(),
+                  tags: m.tags,
+                })
+                  .then(memories.refresh)
+                  .catch((e) => notify(String(e), true));
+            }}
+          >
+            <Pencil size={13} />
+          </button>
           <button
             className="icon-button"
             title="删除"
@@ -249,12 +300,35 @@ export function MemoriesSection() {
       {p && (
         <>
           <h3>本项目的约定</h3>
-          {p.memories.map((m) => (
+          {p.memories.filter(matches).map((m) => (
             <div className="memory-card" key={m.id}>
               <div>
                 {m.text}
                 <small>{m.tags.join(" · ")}</small>
               </div>
+              <button
+                className="icon-button"
+                title="编辑项目约定"
+                onClick={async () => {
+                  const text = await askText("编辑项目约定", m.text, true);
+                  if (text?.trim())
+                    void commit(
+                      [
+                        {
+                          type: "memory.upsert",
+                          memory: {
+                            ...m,
+                            text: text.trim(),
+                            updatedAt: new Date().toISOString(),
+                          },
+                        },
+                      ],
+                      "编辑项目约定",
+                    );
+                }}
+              >
+                <Pencil size={13} />
+              </button>
               <button
                 className="icon-button"
                 title="删除"

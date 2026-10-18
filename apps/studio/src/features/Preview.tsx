@@ -12,7 +12,12 @@ import {
   StepBack,
   StepForward,
 } from "lucide-react";
-import { activeTimeline, durationInFrames, formatTime } from "@tadacut/domain";
+import {
+  activeTimeline,
+  durationInFrames,
+  formatTime,
+  formatFrameTimecode,
+} from "@tadacut/domain";
 import { remember, setState, useStudio } from "../lib/store";
 import {
   markedRange,
@@ -197,7 +202,9 @@ export function Preview() {
       </div>
       <div className="preview-footer">
         <span className="timecode">
-          {formatTime(frame, timeline.fps)}
+          {timeline.profile
+            ? formatFrameTimecode(frame, timeline.profile)
+            : formatTime(frame, timeline.fps)}
           <small>
             {" "}
             / {formatTime(durationInFrames(timeline), timeline.fps)}

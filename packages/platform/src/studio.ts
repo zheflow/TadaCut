@@ -37,6 +37,7 @@ export const resourceSections = [
   "extensions",
 ] as const;
 export const creativeToolIds = [
+  "advanced",
   "image",
   "video",
   "speech",
@@ -108,6 +109,22 @@ export const studioContextSchema = z
   .strict();
 export type StudioContext = z.infer<typeof studioContextSchema>;
 export const studioActionSchema = z.discriminatedUnion("type", [
+  z
+    .object({
+      type: z.literal("recording"),
+      action: z.enum(["status", "configure", "start", "stop"]),
+      mode: z.enum(["screen", "camera", "screen-camera", "voice"]).optional(),
+      sourceId: z.string().optional(),
+      cameraId: z.string().optional(),
+      mic: z.boolean().optional(),
+      systemAudio: z.boolean().optional(),
+      cameraScale: z.number().min(0.1).max(0.5).optional(),
+      cameraPosition: z
+        .enum(["top-left", "top-right", "bottom-left", "bottom-right"])
+        .optional(),
+      mirror: z.boolean().optional(),
+    })
+    .strict(),
   z.object({ type: z.literal("snapshot") }).strict(),
   z
     .object({
@@ -139,7 +156,7 @@ export const studioActionSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("dialog"),
-      dialog: z.enum(["export", "tools", "title", "project", "none"]),
+      dialog: z.enum(["export", "tools", "title", "project", "team", "none"]),
     })
     .strict(),
   z

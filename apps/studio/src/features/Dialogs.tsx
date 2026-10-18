@@ -1,7 +1,10 @@
+import { TeamWorkspace } from "./TeamWorkspace";
+import { AdvancedToolsDialog } from "./AdvancedEditing";
 import { LocalAudioLabels, ReframeDialog } from "./LocalTools";
 import { useEffect, useState } from "react";
 import {
   activeTimeline,
+  colorExportSupport,
   assetSchema,
   clipSchema,
   durationInFrames,
@@ -55,6 +58,8 @@ export function Dialogs() {
     <NewProjectDialog close={close} />
   ) : modal === "export" ? (
     <ExportDialog close={close} />
+  ) : modal === "team" ? (
+    <TeamWorkspace close={close} />
   ) : modal === "title" ? (
     <TitleDialog close={close} />
   ) : (
@@ -159,10 +164,16 @@ function NewProjectDialog({ close }: { close(): void }) {
 function ExportDialog({ close }: { close(): void }) {
   const p = useStudio((s) => s.project);
   const [format, setFormat] = useState("video"),
-    [codec, setCodec] = useState("h264"),
+    [codec, setCodec] = useState(() => {
+      const p = getState().project;
+      return p && activeTimeline(p).profile?.outputSpace.startsWith("rec2020")
+        ? "h265"
+        : "h264";
+    }),
     [quality, setQuality] = useState(20),
     [transparent, setTransparent] = useState(false),
     [hardware, setHardware] = useState(false),
+    [allowSdrComposite, setAllowSdrComposite] = useState(false),
     // Half the logical cores, like Remotion's own default.
     [concurrency, setConcurrency] = useState(() =>
       Math.max(
@@ -228,6 +239,7 @@ function ExportDialog({ close }: { close(): void }) {
         crf: quality,
         transparent,
         hardware,
+        allowSdrComposite,
         concurrency,
         ...(scope === "range" && range
           ? { range: [range.start, range.end] }
@@ -319,6 +331,30 @@ function ExportDialog({ close }: { close(): void }) {
                 <option value="prores">ProRes · MOV</option>
               </select>
             </label>
+            {colorExportSupport(p, t).required && (
+              <div className="color-export-notice">
+                <p>
+                  输出空间：{t.profile?.outputSpace ?? "rec709"}。HDR 请选 H.265
+                  / ProRes，导出 10 位像素。
+                </p>
+                {!colorExportSupport(p, t).native && (
+                  <>
+                    <p>
+                      此工程包含{colorExportSupport(p, t).reasons.join("、")}
+                      ，当前需要先进行 SDR 特效合成，会压缩 HDR 高光。
+                    </p>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={allowSdrComposite}
+                        onChange={(e) => setAllowSdrComposite(e.target.checked)}
+                      />
+                      允许 SDR 特效合成后转换到目标空间
+                    </label>
+                  </>
+                )}
+              </div>
+            )}
             <label className="form-field">
               并行渲染
               <input
@@ -717,6 +753,7 @@ function ToolsDialog({ close }: { close(): void }) {
       setState({ creativeTool: null });
     }
   }, [requested]);
+  if (selected === "advanced") return <AdvancedToolsDialog close={close} />;
   if (selected === "audio-labels") return <LocalAudioLabels close={close} />;
   if (selected === "reframe" || selected === "subject-reframe")
     return (
@@ -795,6 +832,16 @@ function ToolsDialog({ close }: { close(): void }) {
       <div className="modal-body">
         {!tool ? (
           <div className="creative-tools-grid">
+            <button
+              className="creative-tool tone-2"
+              onClick={() => setSelected("advanced")}
+            >
+              <Sparkles size={22} />
+              <strong>高级剪辑与 AI</strong>
+              <span>
+                曲线变速、蒙版、跟踪、抠像、数字人、HDR、代理与字幕导入
+              </span>
+            </button>
             {tools.map((t, i) => (
               <button
                 key={t.id}

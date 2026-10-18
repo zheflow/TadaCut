@@ -299,7 +299,7 @@ export function App() {
             <Command size={11} />
             快捷键
           </button>
-          <span>TadaCut 0.1</span>
+          <span>TadaCut 0.2</span>
         </footer>
       </div>
       <Dialogs />

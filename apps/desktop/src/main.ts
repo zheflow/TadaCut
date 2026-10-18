@@ -15,6 +15,10 @@ import path from "node:path";
 import { createStudioServer } from "../../server/src/server";
 import { createDesktopPort } from "./native";
 app.setName("TadaCut");
+app.setAboutPanelOptions({
+  applicationName: "TadaCut",
+  applicationVersion: app.getVersion(),
+});
 /**
  * Apps opened from Finder or the Dock start with a minimal PATH, so CLIs from
  * Homebrew, npm or version managers (and the node their scripts need) are

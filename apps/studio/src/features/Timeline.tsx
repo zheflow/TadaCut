@@ -248,8 +248,10 @@ export function TimelineEditor() {
     const y = e.clientY,
       initial = height;
     e.currentTarget.setPointerCapture(e.pointerId);
-    const move = (event: PointerEvent) =>
+    const move = (event: PointerEvent) => {
+      if (!(event.buttons & 1)) return;
       setHeight(Math.max(210, Math.min(520, initial + y - event.clientY)));
+    };
     const end = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", end);
@@ -415,6 +417,7 @@ export function TimelineEditor() {
       changed = false;
     const move = (ev: PointerEvent) => {
       const delta = Math.round(((ev.clientX - originalX) / zoom) * t.fps);
+      if (!(ev.buttons & 1)) return;
       if (
         Math.abs(ev.clientX - originalX) > 3 ||
         (mode === "move" && Math.abs(ev.clientY - originalY) > 3)

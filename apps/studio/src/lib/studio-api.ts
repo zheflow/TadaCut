@@ -41,6 +41,8 @@ export interface ThreadSummary {
   } | null;
   resumable: boolean;
   activeGroups: string[];
+  compactions: number;
+  connection: import("../../../server/src/agent").AgentThread["lastRun"] | null;
 }
 export const del = <T>(url: string) => request<T>(url, { method: "DELETE" });
 /** Server events that mean a list on screen is stale. */
@@ -51,7 +53,8 @@ export type Tick =
   | "memories"
   | "settings"
   | "agent-settings"
-  | "memory-candidates";
+  | "memory-candidates"
+  | "agent-state";
 export function bump(kind: Tick) {
   const ticks = getState().ticks;
   setState({ ticks: { ...ticks, [kind]: (ticks[kind] ?? 0) + 1 } });
@@ -113,7 +116,9 @@ export const agentApi = {
         `/api/projects/${projectId()}/agent/continue`,
         {
           studioContext: currentStudioContext(),
-          ...(providerId ? { providerId } : {}),
+          ...(!getState().thread?.connection && providerId
+            ? { providerId }
+            : {}),
           ...(mode ? { mode } : {}),
         },
       );
@@ -141,6 +146,19 @@ export const agentApi = {
       return result;
     }, "已开始新的对话"),
   settings: () => request<AgentSettings>("/api/agent/settings"),
+  compact: async (id = projectId()) => {
+    const result = await post<{ compacted: boolean; thread: ThreadSummary }>(
+      `/api/projects/${id}/agent/compact`,
+      {},
+    );
+    if (id === projectId()) setState({ thread: result.thread });
+    notify(
+      result.compacted
+        ? "旧上下文已压缩，任务计划与技能引用保留"
+        : "当前上下文较短，无需压缩",
+    );
+    return result;
+  },
   saveSettings: (patch: Partial<AgentSettings>) =>
     run(
       () => post<AgentSettings>("/api/agent/settings", patch),

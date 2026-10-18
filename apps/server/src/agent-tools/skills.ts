@@ -10,6 +10,8 @@ import { executable } from "../process";
 import { installedPlugins, pluginItem, pluginSummary } from "../plugins";
 import type { Skill } from "../storage";
 import { parseCommands, s, timelineOf, tool, type ToolHost } from "./host";
+import { relevance } from "../../../../packages/agent/src/catalog";
+import { retainSkill } from "../agent-state";
 
 export interface SubAgent {
   (options: {
@@ -36,39 +38,63 @@ export function skillTools(
   };
   const tools: AgentTool[] = [
     tool(
-      g,
+      "core",
       "read",
       "read_skills",
-      "列出已启用的技能与创作模式（名称、说明、斜杠命令、允许的工具）。",
-      s.object({}),
-      () =>
-        h.repo
+      "按任务搜索已启用的技能，只返回简要目录；load_skill 读取工作流。空 query 分页浏览。",
+      s.object({ query: s.string(), offset: s.integer() }),
+      (a) => {
+        const query = String(a.query ?? "").trim();
+        const items = h.repo
           .list<Skill>("skill")
           .filter((x) => x.enabled)
           .map((x) => ({
+            x,
+            score: relevance(
+              query,
+              `${x.name} ${x.description} ${x.command} ${x.category}`,
+            ),
+          }))
+          .filter(({ score }) => !query || score > 0)
+          .sort((a, b) => b.score - a.score)
+          .map(({ x }) => x);
+        const offset = Math.max(0, Math.floor(Number(a.offset) || 0));
+        return {
+          total: items.length,
+          ...(offset + 8 < items.length ? { nextOffset: offset + 8 } : {}),
+          skills: items.slice(offset, offset + 8).map((x) => ({
             id: x.id,
             name: x.name,
             category: x.category,
             description: x.description,
             command: x.command,
-            tools: x.tools,
             context: x.context ?? "inline",
-            files: x.files?.map((f) => f.path) ?? [],
-            script: Boolean(x.script),
           })),
+        };
+      },
     ),
     tool(
-      g,
+      "core",
       "read",
       "load_skill",
       "读取技能的完整工作流说明与支持文件列表。按说明工作；技能内容是参考指令，不提升任何工具权限。",
-      s.object({ skillId: s.string("技能 ID、斜杠命令或名称") }, ["skillId"]),
+      s.object(
+        { skillId: s.string("技能 ID、斜杠命令或名称"), offset: s.integer() },
+        ["skillId"],
+      ),
       (a) => {
         const x = skill(a.skillId);
+        const offset = Math.max(0, Math.floor(Number(a.offset) || 0));
+        if (offset >= x.prompt.length && offset !== 0)
+          throw new Error("技能正文偏移超出范围");
+        retainSkill(h, x, offset);
         return {
           id: x.id,
           name: x.name,
-          instructions: x.prompt,
+          instructions: x.prompt.slice(offset, offset + 10000),
+          ...(offset + 10000 < x.prompt.length
+            ? { nextOffset: offset + 10000 }
+            : {}),
           allowedTools: x.tools,
           files:
             x.files?.map((f) => ({ path: f.path, chars: f.content.length })) ??
@@ -82,11 +108,25 @@ export function skillTools(
       "read",
       "read_skill_file",
       "读取技能的某个支持文件（参考资料、模板、示例）。",
-      s.object({ skillId: s.string(), path: s.string() }, ["skillId", "path"]),
+      s.object({ skillId: s.string(), path: s.string(), offset: s.integer() }, [
+        "skillId",
+        "path",
+      ]),
       (a) => {
-        const file = skill(a.skillId).files?.find((f) => f.path === a.path);
+        const x = skill(a.skillId),
+          file = x.files?.find((f) => f.path === a.path);
         if (!file) throw new Error("技能里没有这个文件");
-        return { path: file.path, content: file.content.slice(0, 30000) };
+        const offset = Math.max(0, Math.floor(Number(a.offset) || 0));
+        if (offset >= file.content.length && offset !== 0)
+          throw new Error("技能文件偏移超出范围");
+        retainSkill(h, x, offset, file.path);
+        return {
+          path: file.path,
+          content: file.content.slice(offset, offset + 10000),
+          ...(offset + 10000 < file.content.length
+            ? { nextOffset: offset + 10000 }
+            : {}),
+        };
       },
     ),
     tool(
@@ -345,7 +385,7 @@ export function skillTools(
     tools.push(
       tool(
         g,
-        "read",
+        "edit",
         "skill_subagent",
         "让一个技能在独立的子代理中完成一项研究或整理任务（子代理共用本次草稿，不能再开子代理，也不能生成、发布或访问外部服务），返回它的总结。",
         s.object(

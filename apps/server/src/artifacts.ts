@@ -7,6 +7,8 @@ import { zipSync, unzipSync } from "fflate";
 import { XMLParser } from "fast-xml-parser";
 import {
   activeTimeline,
+  timelineProfileSchema,
+  rationalFrameRate,
   assetSchema,
   clipSchema,
   exportFcpxml,
@@ -51,8 +53,13 @@ export function importFcpxml(text: string, id: string, now: string): Project {
     t.width = Number(format.width);
     t.height = Number(format.height);
   }
-  if (format?.frameDuration)
-    t.fps = Math.round(1 / parseSeconds(format.frameDuration));
+  if (format?.frameDuration) {
+    t.fps = 1 / parseSeconds(format.frameDuration);
+    t.profile = timelineProfileSchema.parse({
+      rate: rationalFrameRate(t.fps),
+      dropFrame: sequence.tcFormat === "DF",
+    });
+  }
   const refs = new Map<string, string>();
   for (const original of asArray<any>(data.resources.asset)) {
     const assetId = crypto.randomUUID(),

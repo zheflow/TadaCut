@@ -31,13 +31,15 @@ try {
       `--user-data-dir=${path.join(dataDir, "profile")}`,
     ],
     env,
-    timeout: 30000,
+    timeout: packaged ? 120000 : 30000,
   });
 } catch (error) {
   await fs.rm(dataDir, { recursive: true, force: true });
   throw error;
 }
-const page = await application.firstWindow();
+const page = await application.firstWindow({
+  timeout: packaged ? 120000 : 30000,
+});
 page.setDefaultTimeout(10000);
 const steps = [],
   errors = [];

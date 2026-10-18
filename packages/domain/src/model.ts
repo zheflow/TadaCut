@@ -1,4 +1,11 @@
 import { z } from "zod";
+import {
+  canvasNodeSchema,
+  clipAdvancedSchema,
+  mediaVariantSchema,
+  provenanceSchema,
+  timelineProfileSchema,
+} from "./advanced-model";
 
 export const frame = z.number().int().nonnegative();
 export const positiveFrames = z.number().int().positive();
@@ -25,6 +32,12 @@ export const assetSchema = z
     mime: z.string().optional(),
     provider: z.string().optional(),
     originalPath: z.string().optional(),
+    alpha: z.boolean().optional(),
+    proxy: mediaVariantSchema.optional(),
+    provenance: provenanceSchema.optional(),
+    colorSpace: z
+      .enum(["rec709", "srgb", "rec2020-pq", "rec2020-hlg"])
+      .optional(),
     /** For a nested sequence: the timeline it plays. */
     sequenceTimelineId: z.string().optional(),
     /** Where an installed extension or online library supplied the asset. */
@@ -183,6 +196,7 @@ export const clipSchema = z
     duration: positiveFrames,
     sourceOffset: z.number().nonnegative().default(0),
     speed: z.number().min(0.05).max(16).default(1),
+    advanced: clipAdvancedSchema.optional(),
     name: z.string().default(""),
     x: z.number().finite().default(0),
     y: z.number().finite().default(0),
@@ -301,7 +315,8 @@ export const timelineSchema = z
   .object({
     id,
     name: z.string().min(1),
-    fps: z.number().int().min(1).max(120),
+    fps: z.number().finite().min(1).max(120),
+    profile: timelineProfileSchema.optional(),
     width: z.number().int().min(64).max(8192),
     height: z.number().int().min(64).max(8192),
     background: z.string().default("#101114"),
@@ -494,16 +509,7 @@ export const projectSchema = z
         words: z.array(wordSchema),
       }),
     ),
-    canvas: z.array(
-      z.object({
-        id,
-        kind: z.enum(["note", "asset", "entity", "shot"]),
-        x: z.number(),
-        y: z.number(),
-        label: z.string(),
-        referenceId: z.string().optional(),
-      }),
-    ),
+    canvas: z.array(canvasNodeSchema),
     memories: z.array(
       z.object({
         id,

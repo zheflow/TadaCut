@@ -1,3 +1,4 @@
+import { recordingControl } from "./recording-control";
 import { activeTimeline } from "@tadacut/domain";
 import {
   studioActionSchema,
@@ -184,6 +185,12 @@ export async function applyStudioAction(
   switch (action.type) {
     case "snapshot":
       break;
+    case "recording": {
+      setState({ nav: "studio", mode: "record", modal: null });
+      const result = await recordingControl(action);
+      message = JSON.stringify(result);
+      break;
+    }
     case "confirm": {
       if (!request || !s.project) throw new Error("缺少确认请求");
       const projectId = s.project.id;

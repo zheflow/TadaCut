@@ -1,3 +1,4 @@
+import { exportManagedColor } from "./color-export";
 import { understandMedia } from "./understand";
 import { executeSkillScript } from "./skill-script";
 import { assertPublicUrl } from "./public-web";
@@ -7,6 +8,7 @@ import crypto from "node:crypto";
 import { chromium } from "playwright-core";
 import {
   alignAudio,
+  colorExportSupport,
   activeTimeline,
   assetSchema,
   clipSchema,
@@ -584,7 +586,12 @@ export function registerHandlers({
         activeTimeline(p);
     const output = path.join(artifactsDir, job.id);
     await fs.mkdir(output, { recursive: true });
-    const result = await exportMedia({
+    const colorManaged =
+      colorExportSupport(p, t).required &&
+      !["mp3", "wav", "aac"].includes(job.input.codec);
+    const result = await (colorManaged ? exportManagedColor : exportMedia)({
+      media,
+      allowSdrComposite: job.input.allowSdrComposite === true,
       project: p,
       timeline: t,
       codec: job.input.codec || "h264",
@@ -642,6 +649,7 @@ export function registerHandlers({
       exportId: record.id,
       url: record.url,
       filename: result.filename,
+      ...("warnings" in result ? { warnings: result.warnings } : {}),
     };
   });
   jobs.register("computer-use", async ({ job, signal, progress }) => {

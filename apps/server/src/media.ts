@@ -146,6 +146,25 @@ export class MediaService {
       kind,
       ...dimensions,
       timecode: data?.format?.tags?.timecode ?? video?.tags?.timecode,
+      ...(video
+        ? {
+            alpha:
+              video.tags?.alpha_mode === "1" ||
+              /yuva|rgba|argb|bgra|abgr|gbrap/.test(video.pix_fmt ?? ""),
+          }
+        : {}),
+      ...(video
+        ? {
+            colorSpace:
+              video.color_transfer === "smpte2084"
+                ? "rec2020-pq"
+                : video.color_transfer === "arib-std-b67"
+                  ? "rec2020-hlg"
+                  : video.color_transfer === "iec61966-2-1"
+                    ? "srgb"
+                    : "rec709",
+          }
+        : {}),
       ...(Number.isFinite(duration) && duration >= 0 ? { duration } : {}),
     } as Partial<Asset>;
   }

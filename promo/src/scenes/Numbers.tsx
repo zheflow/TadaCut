@@ -6,8 +6,8 @@ import { cues } from "../timeline";
 import { ink, sans } from "../theme";
 
 const stats = [
-  { value: 182, label: "个助手工具" },
-  { value: 40, label: "个内置技能" },
+  { value: 235, label: "项能力，按需调用" },
+  { value: 46, label: "个内置技能" },
   { value: 8, label: "个页面，一个助手" },
 ];
 

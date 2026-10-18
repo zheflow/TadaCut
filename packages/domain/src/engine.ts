@@ -4,6 +4,7 @@ import {
   type Command,
   type Transaction,
 } from "./commands";
+import { dependencyValue, sliceAdvanced } from "./advanced";
 import { sliceKeyframes } from "./animation";
 import { effectParams } from "./effects";
 import {
@@ -342,6 +343,14 @@ function apply(p: Project, c: Command, now: string) {
       throw new DomainError("TRACK_LOCKED", "请先解锁轨道");
   }
   switch (c.type) {
+    case "project.assert":
+      for (const dep of c.dependencies)
+        if (dependencyValue(p, dep) !== dep.value)
+          throw new DomainError(
+            "STALE_RESULT",
+            "原素材或片段已改变，请重新处理后应用",
+          );
+      break;
     case "project.rename":
       p.name = c.name;
       break;
@@ -350,6 +359,12 @@ function apply(p: Project, c: Command, now: string) {
       break;
     case "asset.add":
       unique(p.assets, c.asset, "素材");
+      break;
+    case "asset.proxy.clear":
+      delete requireValue(
+        p.assets.find((a) => a.id === c.assetId),
+        "素材",
+      ).proxy;
       break;
     case "asset.update":
       Object.assign(
@@ -442,6 +457,61 @@ function apply(p: Project, c: Command, now: string) {
         p.activeTimelineId = p.timelines[0].id;
       break;
     }
+    case "timeline.profile": {
+      const t = timeline(p, c.timelineId),
+        fps = c.profile.rate.numerator / c.profile.rate.denominator;
+      if (c.preserveTime && fps !== t.fps) {
+        const ratio = fps / t.fps,
+          scale = (n: number) => Math.round(n * ratio);
+        for (const item of t.clips) {
+          const end = scale(item.start + item.duration);
+          item.start = scale(item.start);
+          item.duration = Math.max(1, end - item.start);
+          item.fadeIn = scale(item.fadeIn);
+          item.fadeOut = scale(item.fadeOut);
+          if (item.transition)
+            item.transition.duration = Math.max(
+              1,
+              scale(item.transition.duration),
+            );
+          const rescale = <T extends { frame: number }>(keys: T[]) =>
+            [
+              ...new Map(
+                keys.map((k) => {
+                  const frame = Math.min(item.duration - 1, scale(k.frame));
+                  return [frame, { ...k, frame }];
+                }),
+              ).values(),
+            ].sort((a, b) => a.frame - b.frame);
+          for (const prop of Object.keys(
+            item.keyframes,
+          ) as (keyof Clip["keyframes"])[])
+            item.keyframes[prop] = rescale(item.keyframes[prop] ?? []);
+          for (const mask of item.advanced?.masks ?? [])
+            mask.keys = rescale(mask.keys);
+          if (item.advanced?.tracking)
+            item.advanced.tracking.samples = rescale(
+              item.advanced.tracking.samples,
+            );
+        }
+        for (const marker of t.markers) {
+          marker.frame = scale(marker.frame);
+          marker.duration = scale(marker.duration);
+        }
+        for (const g of t.multicam)
+          g.switches = [
+            ...new Map(
+              g.switches.map((k) => [
+                scale(k.frame),
+                { ...k, frame: scale(k.frame) },
+              ]),
+            ).values(),
+          ];
+      }
+      t.profile = c.profile;
+      t.fps = fps;
+      break;
+    }
     case "timeline.resize":
       Object.assign(timeline(p, c.timelineId), {
         width: c.width,
@@ -532,6 +602,7 @@ function apply(p: Project, c: Command, now: string) {
           duration: item.duration - delta,
           sourceOffset: item.sourceOffset + (delta / t.fps) * item.speed,
           keyframes: sliceKeyframes(item, delta, item.duration - delta),
+          advanced: sliceAdvanced(item.advanced, delta, item.duration - delta),
           ...(item.caption
             ? { caption: sliceWords(item, delta, item.duration - delta) }
             : {}),
@@ -539,6 +610,7 @@ function apply(p: Project, c: Command, now: string) {
         "片段",
       );
       item.keyframes = sliceKeyframes(item, 0, delta);
+      item.advanced = sliceAdvanced(item.advanced, 0, delta);
       if (item.caption) item.caption = sliceWords(item, 0, delta);
       item.duration = delta;
       // The outgoing transition stays with the right half, at the original cut.
@@ -618,7 +690,15 @@ function apply(p: Project, c: Command, now: string) {
       replace(p.canvas, c.node);
       break;
     case "canvas.remove":
-      p.canvas = p.canvas.filter((n) => n.id !== c.nodeId);
+      p.canvas = p.canvas
+        .filter((n) => n.id !== c.nodeId)
+        .map((n) => ({
+          ...n,
+          ...(n.parentId === c.nodeId ? { parentId: undefined } : {}),
+          ...(n.references
+            ? { references: n.references.filter((id) => id !== c.nodeId) }
+            : {}),
+        }));
       break;
     case "memory.upsert":
       replace(p.memories, c.memory);
@@ -744,6 +824,24 @@ export function validateProject(value: unknown): Project {
     if (new Set(items.map((i) => i.id)).size !== items.length)
       throw new DomainError("DUPLICATE_ID", `${label} ID 重复`);
   };
+  ensureIds(p.canvas, "画布节点");
+  for (const node of p.canvas) {
+    const seen = new Set([node.id]);
+    let cursor = node;
+    while (cursor.parentId) {
+      if (seen.has(cursor.parentId))
+        throw new DomainError("CANVAS_CYCLE", "画布分组不能包含自身");
+      seen.add(cursor.parentId);
+      const parent = p.canvas.find((n) => n.id === cursor.parentId);
+      if (!parent || parent.kind !== "group")
+        throw new DomainError("BROKEN_REFERENCE", "画布分组不存在");
+      cursor = parent;
+    }
+    if (node.references?.some((id) => !p.canvas.some((n) => n.id === id)))
+      throw new DomainError("BROKEN_REFERENCE", "画布引用不存在");
+    if (node.history?.some((h) => !p.assets.some((a) => a.id === h.assetId)))
+      throw new DomainError("BROKEN_REFERENCE", "画布历史素材不存在");
+  }
   ensureIds(p.assets, "素材");
   ensureIds(p.timelines, "时间线");
   ensureIds(p.story.shots, "镜头");
@@ -751,6 +849,12 @@ export function validateProject(value: unknown): Project {
   if (!p.timelines.some((t) => t.id === p.activeTimelineId))
     throw new DomainError("ACTIVE_TIMELINE", "当前时间线不存在");
   for (const t of p.timelines) {
+    if (
+      t.profile &&
+      Math.abs(t.fps - t.profile.rate.numerator / t.profile.rate.denominator) >
+        1e-8
+    )
+      throw new DomainError("FRAME_RATE", "时间线与帧率配置不一致");
     ensureIds(t.tracks, "轨道");
     ensureIds(t.clips, "片段");
     for (const c of t.clips) {
@@ -765,6 +869,22 @@ export function validateProject(value: unknown): Project {
       for (const keys of Object.values(c.keyframes))
         if (keys?.some((k) => k.frame >= c.duration))
           throw new DomainError("KEYFRAME_OUTSIDE", "关键帧超出片段");
+      ensureIds(c.advanced?.masks ?? [], "蒙版");
+      const lists = [
+        ...(c.advanced?.masks ?? []).map((m) => m.keys),
+        ...(c.advanced?.tracking ? [c.advanced.tracking.samples] : []),
+      ];
+      for (const keys of lists)
+        if (
+          keys.some(
+            (k, i) =>
+              k.frame >= c.duration || (i > 0 && k.frame <= keys[i - 1].frame),
+          )
+        )
+          throw new DomainError(
+            "KEYFRAME_OUTSIDE",
+            "蒙版或跟踪帧须递增且在片段范围内",
+          );
       for (const preset of c.effects.presets)
         try {
           effectParams(preset.id, preset.params);

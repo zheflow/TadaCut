@@ -1,3 +1,4 @@
+import { AdvancedVisualPanel, TimelineProfilePanel } from "./AdvancedEditing";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
@@ -224,6 +225,7 @@ export function Inspector() {
         ["basic", "画面"],
         ...(textual ? [["text", "文字"]] : []),
         ["effects", "特效"],
+        ["advanced", "高级"],
         ["color", "调色"],
         ["transition", "转场"],
         ["keyframes", "关键帧"],
@@ -278,6 +280,8 @@ export function Inspector() {
       <div className="inspector-scroll">
         {tab === "basic" ? (
           <BasicTab p={p} t={t} c={c} patch={patch} />
+        ) : tab === "advanced" ? (
+          <AdvancedVisualPanel p={p} t={t} clipIds={selected} />
         ) : tab === "text" ? (
           <TextTab p={p} t={t} c={c} patch={patch} />
         ) : tab === "effects" ? (
@@ -2082,6 +2086,7 @@ function TimelineSettings({
     );
   return (
     <div className="inspector">
+      <TimelineProfilePanel timeline={t} />
       <div className="panel-heading">
         <span>
           <Layers size={15} />

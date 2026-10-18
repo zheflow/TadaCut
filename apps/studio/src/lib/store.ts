@@ -106,7 +106,7 @@ interface State {
   providerId: string;
   agentBackend: "api" | "codex" | "claude" | "copilot";
   skillId: string | null;
-  modal: "export" | "tools" | "title" | "project" | null;
+  modal: "export" | "tools" | "title" | "project" | "team" | null;
   /** Number of clips on the in-app clipboard. */
   clipboard: number;
   ask: { id: number; title: string; value: string; multiline: boolean } | null;
@@ -388,6 +388,7 @@ export async function bootstrap() {
           "memory-candidates",
           "settings",
           "agent-settings",
+          "agent-state",
         ].includes(event.type)
       )
         setState({

@@ -2,11 +2,9 @@
 
 **Say it. Make it. — 说出想法，剪出作品。**
 
-[English](README.md) · [观看 50 秒宣传片](docs/media/TadaCut-promo.mp4)
+[English](README.md) · [观看 58 秒宣传片](docs/media/TadaCut-promo.mp4)
 
 [![TadaCut 宣传片封面](docs/media/cover.png)](docs/media/TadaCut-promo.mp4)
-
-https://github.com/user-attachments/assets/009af342-d71d-4744-a1cf-25d2d80d0694
 
 一个由 TypeScript 编写的本地视频创作工作室：把故事、素材、时间线、自选模型与应用录制放在同一个项目里。界面和业务代码共用于 macOS / Windows，桌面宿主使用 Electron。
 
@@ -48,6 +46,16 @@ npm run package:win   # 在 Windows 上生成 x64 NSIS .exe
 7. 在“素材库”复用素材、编辑代码动画、重连源文件、关联自动导入目录或按语义查找素材。在“任务”查看进度、分析结果、下载、取消与重试。
 8. 导出完整 `.tadacut` 工程、SRT、Markdown、FCPXML、EDL 或含素材的 CapCut 草稿。视频支持 H.264 / H.265 / VP8 / VP9 / ProRes；音频支持 MP3 / WAV，WebM / ProRes 可保留透明通道。
 
+## 越用，越了解你的习惯
+
+![宣传片中的偏好确认与跨项目记忆演示](docs/media/memory.png)
+
+记住常用时长、画幅、字幕风格和项目约定，下次创作时召回相关偏好，减少重复解释。长期偏好跨项目保存，项目约定只服务于当前项目；本次要求始终优先。
+
+可以直接对助手说“记住：我偏好 15 秒竖屏、白色字幕”。偏好学习默认关闭；开启后，助手提出的记忆候选经你确认才会保存。设置页支持搜索、编辑、删除记忆。助手顶部“管理上下文”可以查看任务计划、工作笔记、已加载技能和上下文预算，主动压缩旧对话；新建对话保留已经保存的记忆。
+
+技能正文、参考文件和工具参数按需加载，任务记录独立于聊天摘要保存，中断后可以继续。具体实现与边界见 [Agent 基础能力](docs/agent-foundation.md)。高级剪辑、蒙版、跟踪、色彩管理、歌词、代理和团队协作均可通过全局助手操作，见 [高级功能清单](docs/advanced-features.md)。
+
 ## 模型与本机能力
 
 密钥保存在宿主凭据库；桌面版优先使用系统凭据加密，浏览器宿主使用权限受限的 AES-GCM 本地库。每项凭据记录自己的加密方式，系统钥匙串在某次启动不可用时应用仍能打开，读不出的密钥会提示重新填写。公共接口只返回 `hasKey`（以及无法读取时的 `keyUnreadable`），工程包不包含密钥。
@@ -82,7 +90,7 @@ node scripts/smoke-ui.mjs
 
 ## 宣传片
 
-`promo/` 是一支 50 秒的宣传片（1920 × 1080，60 FPS），画面、动画和配乐全部由代码生成：Remotion 组件呈现应用工作台界面；示例项目“城市漫游”的四个镜头（晨光城市、山脊、暮色河面、夜路）是 `promo/src/art.tsx` 中的分层 SVG 插画，应用内的示例素材也由同一份代码导出；配乐在 `promo/audio` 中逐个采样合成，画面与声音共用 `promo/src/timeline.ts` 的节拍表。
+`promo/` 是一支 58 秒的宣传片（1920 × 1080，60 FPS），画面、动画和配乐全部由代码生成：Remotion 组件呈现应用工作台界面；示例项目“城市漫游”的四个镜头（晨光城市、山脊、暮色河面、夜路）是 `promo/src/art.tsx` 中的分层 SVG 插画，应用内的示例素材也由同一份代码导出；配乐在 `promo/audio` 中逐个采样合成，画面与声音共用 `promo/src/timeline.ts` 的节拍表。
 
 ```sh
 npm run promo                       # 输出 output/promo/TadaCut-promo.mp4 与 cover.png
@@ -91,6 +99,8 @@ npm run promo -- --shots            # 四个示例镜头的总览与单张
 npm run promo -- --audio            # 只生成配乐
 npm run sample-art                  # 把四个镜头写入应用示例项目的素材
 ```
+
+新增记忆章节用“确认保存偏好 → 下个项目沿用”的动画介绍“越用，越了解你的习惯”。学习候选需要确认，也能随时修改、删除；宣传片演示工作流程，应用截图来自真实运行界面。
 
 渲染优先使用 `build/render-browser` 中的 Chrome Headless Shell，不调用任何模型。
 

@@ -7,6 +7,36 @@ export function JobResult({ job }: { job: Job }) {
   if (!result) return null;
   return (
     <div className="job-result">
+      {Array.isArray(result.warnings) &&
+        result.warnings.map((warning: string, i: number) => (
+          <p className="hint" key={i}>
+            {warning}
+          </p>
+        ))}
+      {job.kind === "process-media" &&
+        result.url &&
+        (/\.(wav|mp3|m4a|ogg)$/i.test(result.url) ? (
+          <audio
+            className="processing-preview"
+            controls
+            src={result.previewUrl ?? result.url}
+            preload="metadata"
+          />
+        ) : (
+          <video
+            className="processing-preview"
+            controls
+            muted
+            src={result.previewUrl ?? result.url}
+            preload="metadata"
+          />
+        ))}
+      {job.kind === "process-media" && (
+        <p>
+          {result.cached ? "已复用有效缓存。" : ""}候选结果就绪，应用后可撤销。
+        </p>
+      )}
+
       {typeof result.rmsDb === "number" && (
         <div className="analysis-metrics">
           <span>

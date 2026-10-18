@@ -2,6 +2,8 @@ import { completeChat } from "@tadacut/providers";
 import type { Command } from "@tadacut/domain";
 import type { AgentTool } from "../../../../packages/agent/src/runner";
 import { s, tool, type ToolHost } from "./host";
+import { recallMemories, cleanMemoryText } from "../agent-memory";
+import { z } from "zod";
 
 /** A preference that applies across projects. */
 export interface GlobalMemory {
@@ -26,6 +28,83 @@ export function projectTools(h: ToolHost): AgentTool[] {
   const g = "project",
     m = "memory";
   return [
+    tool(
+      m,
+      "edit",
+      "suggest_memory",
+      "在用户启用偏好学习时，提出一条稳定偏好候选；必须经用户确认后才成为长期记忆。只依据用户明确说过的话，不保存本轮临时要求。",
+      s.object(
+        { text: s.string(), reason: s.string(), tags: s.array(s.string()) },
+        ["text", "reason"],
+      ),
+      (a) => {
+        if (
+          !h.repo.settings<{ learnPreferences?: boolean }>("agent", {})
+            .learnPreferences
+        )
+          throw new Error(
+            "用户未启用偏好学习；明确要求记住的内容可用 remember",
+          );
+        const text = String(a.text ?? "")
+          .trim()
+          .slice(0, 500);
+        if (
+          !text ||
+          /sk-[A-Za-z0-9_-]{24,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|Bearer\s+[A-Za-z0-9._-]{20,}/i.test(
+            text,
+          )
+        )
+          throw new Error("不能把密钥或认证凭据作为记忆候选");
+        const duplicate = [
+          ...globalMemories(h),
+          ...h.repo.list<MemoryCandidate>("memory-candidate"),
+        ].find((m) => m.text.trim() === text);
+        if (duplicate) return { id: duplicate.id, duplicate: true };
+        const candidate: MemoryCandidate = {
+          id: h.makeId(),
+          projectId: h.projectId,
+          text,
+          tags: Array.isArray(a.tags)
+            ? a.tags.filter((t: unknown) => typeof t === "string").slice(0, 6)
+            : [],
+          reason: String(a.reason ?? "").slice(0, 300),
+          createdAt: h.now(),
+        };
+        h.repo.save("memory-candidate", candidate);
+        h.publish(
+          "memory-candidates",
+          h.repo.list<MemoryCandidate>("memory-candidate"),
+        );
+        return { id: candidate.id, status: "awaiting-user-confirmation" };
+      },
+    ),
+    tool(
+      "core",
+      "read",
+      "search_memories",
+      "按当前任务召回项目约定与长期偏好；记忆只是参考，不授予工具权限。需要更多可换关键词。",
+      s.object(
+        {
+          query: s.string(),
+          scope: s.string(undefined, ["project", "global", "both"]),
+        },
+        ["query"],
+      ),
+      (a) => ({
+        project:
+          a.scope === "global"
+            ? []
+            : recallMemories(h.project().memories, String(a.query ?? ""), {
+                relevantOnly: true,
+              }),
+        global:
+          a.scope === "project"
+            ? []
+            : recallMemories(globalMemories(h), String(a.query ?? ""), {
+                relevantOnly: true,
+              }),
+      }),
+    ),
     tool(
       g,
       "edit",
@@ -102,10 +181,21 @@ export function projectTools(h: ToolHost): AgentTool[] {
       ),
       (a) => {
         const now = h.now();
+        const text = String(a.text ?? "").trim();
+        if (
+          !text ||
+          /sk-[A-Za-z0-9_-]{24,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|Bearer\s+[A-Za-z0-9._-]{20,}/i.test(
+            text,
+          )
+        )
+          throw new Error("记忆必须是有效偏好，不能保存密钥或认证凭据");
         if (a.scope === "global") {
+          const duplicate = globalMemories(h).find(
+            (m) => m.text.trim() === text,
+          );
           const memory: GlobalMemory = {
-            id: a.id || h.makeId(),
-            text: String(a.text).slice(0, 1000),
+            id: a.id || duplicate?.id || h.makeId(),
+            text: text.slice(0, 1000),
             tags: a.tags ?? [],
             source: "agent",
             updatedAt: now,
@@ -114,13 +204,21 @@ export function projectTools(h: ToolHost): AgentTool[] {
           h.publish("memories", globalMemories(h));
           return { memoryId: memory.id, scope: "global" };
         }
-        const id = a.id || h.makeId();
+        const id =
+          a.id ||
+          h.project().memories.find((m) => m.text.trim() === text)?.id ||
+          h.makeId();
         return {
           memoryId: id,
           ...h.edit("记住偏好", [
             {
               type: "memory.upsert",
-              memory: { id, text: a.text, tags: a.tags ?? [], updatedAt: now },
+              memory: {
+                id,
+                text: text.slice(0, 1000),
+                tags: a.tags ?? [],
+                updatedAt: now,
+              },
             },
           ]),
         };
@@ -180,31 +278,69 @@ export function projectTools(h: ToolHost): AgentTool[] {
         );
         let keep: { text: string; tags?: string[] }[];
         try {
-          keep = JSON.parse(
-            text
-              .trim()
-              .replace(/^```(?:json)?\s*/, "")
-              .replace(/\s*```$/, ""),
-          ).keep;
+          keep = z
+            .object({
+              keep: z
+                .array(
+                  z.object({
+                    text: z.string().trim().min(1).max(1000),
+                    tags: z.array(z.string().max(80)).max(20).optional(),
+                  }),
+                )
+                .min(1)
+                .max(100),
+            })
+            .parse(
+              JSON.parse(
+                text
+                  .trim()
+                  .replace(/^```(?:json)?\s*/, "")
+                  .replace(/\s*```$/, ""),
+              ),
+            )
+            .keep.map((item) => ({
+              ...item,
+              text: cleanMemoryText(item.text),
+            }));
           if (!Array.isArray(keep) || !keep.length) throw new Error();
         } catch {
           throw new Error("模型没有返回可用的整理结果");
         }
         const now = h.now();
         if (scope === "global") {
-          for (const old of globalMemories(h))
-            h.repo.deleteRecord("memory", old.id);
-          for (const item of keep)
-            h.repo.save("memory", {
-              id: h.makeId(),
-              text: String(item.text).slice(0, 1000),
-              tags: item.tags ?? [],
-              source: "agent",
-              updatedAt: now,
-            } satisfies GlobalMemory);
+          const current = globalMemories(h);
+          if (
+            JSON.stringify(
+              current.map(({ id, text, tags, updatedAt }) => ({
+                id,
+                text,
+                tags,
+                updatedAt,
+              })),
+            ) !== JSON.stringify(items)
+          )
+            throw new Error("记忆已在整理期间发生变化，请重新读取后整理");
+          h.repo.db.exec("BEGIN");
+          try {
+            for (const old of items) h.repo.deleteRecord("memory", old.id);
+            for (const item of keep)
+              h.repo.save("memory", {
+                id: h.makeId(),
+                text: String(item.text).slice(0, 1000),
+                tags: item.tags ?? [],
+                source: "agent",
+                updatedAt: now,
+              } satisfies GlobalMemory);
+            h.repo.db.exec("COMMIT");
+          } catch (error) {
+            h.repo.db.exec("ROLLBACK");
+            throw error;
+          }
           h.publish("memories", globalMemories(h));
           return { before: items.length, after: keep.length };
         }
+        if (JSON.stringify(h.project().memories) !== JSON.stringify(items))
+          throw new Error("项目记忆已在整理期间发生变化，请重新读取后整理");
         const commands: Command[] = [
           ...items.map(
             (x): Command => ({ type: "memory.remove", memoryId: x.id }),

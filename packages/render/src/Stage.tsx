@@ -1,3 +1,4 @@
+import { needsAdvancedPass } from "./advanced-gl";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Audio,
@@ -9,6 +10,8 @@ import {
 } from "remotion";
 import {
   clipOpacity,
+  maskSvg,
+  trackingTransform,
   sampleProperty,
   type Asset,
   type Clip,
@@ -57,15 +60,36 @@ export function Stage({
 }) {
   // Backwards or paused, media elements are positioned frame by frame instead of playing.
   const forward = playing && rate > 0 ? rate : 0;
+  const playbackAssets =
+    !rendering && timeline.profile?.proxyPreview !== false
+      ? assets.map((a) =>
+          a.proxy && a.proxy.sourceHash === a.hash
+            ? { ...a, url: a.proxy.url }
+            : a,
+        )
+      : assets;
   const voices = audio
-    ? audioVoices(timeline, assets, timelines ?? [timeline])
+    ? audioVoices(timeline, playbackAssets, timelines ?? [timeline])
     : [];
   return (
-    <div className="composition" style={{ background: timeline.background }}>
+    <div
+      className="composition"
+      style={{ background: timeline.background, isolation: "isolate" }}
+    >
       {layersAt(timeline, assets, frame).map((layer) => (
         <StageLayer
           key={layer.clip.id}
-          layer={layer}
+          layer={
+            !rendering &&
+            timeline.profile?.proxyPreview !== false &&
+            layer.asset.proxy &&
+            layer.asset.proxy.sourceHash === layer.asset.hash
+              ? {
+                  ...layer,
+                  asset: { ...layer.asset, url: layer.asset.proxy.url },
+                }
+              : layer
+          }
           timeline={timeline}
           forward={forward}
           rendering={rendering}
@@ -210,7 +234,17 @@ function StageLayer({
     opacity:
       (local < 0 ? sampleProperty(c, "opacity", 0) : clipOpacity(c, local)) *
       (look.style.opacity === undefined ? 1 : Number(look.style.opacity)),
-    transform,
+    transform:
+      trackingTransform(
+        c.advanced?.tracking,
+        at,
+        timeline.width,
+        timeline.height,
+        [sampleProperty(c, "focusX", at), sampleProperty(c, "focusY", at)],
+      ) +
+      " " +
+      transform,
+    mixBlendMode: c.advanced?.blend,
     transformOrigin: `${sampleProperty(c, "focusX", at) * 100}% ${sampleProperty(c, "focusY", at) * 100}%`,
   };
   const filter =
@@ -245,6 +279,11 @@ function StageLayer({
   }, []);
   if (asset.kind === "audio") return null;
   const clipStyle: React.CSSProperties = {
+    maskImage: c.advanced?.masks?.length
+      ? `url("data:image/svg+xml,${encodeURIComponent(maskSvg(c.advanced.masks, timeline.width, timeline.height, at))}")`
+      : undefined,
+    maskMode: "luminance",
+    maskSize: "100% 100%",
     clipPath: cropped,
     filter,
     opacity: look.mediaOpacity,
@@ -293,7 +332,10 @@ function StageLayer({
       );
   } else {
     const effect =
-        (needsEffectCanvas(c.effects) || Boolean(look.gl)) && !effectError,
+        (needsEffectCanvas(c.effects) ||
+          needsAdvancedPass(c.advanced) ||
+          Boolean(look.gl)) &&
+        !effectError,
       mediaStyle = {
         objectFit: c.fit,
         objectPosition: `${sampleProperty(c, "focusX", at) * 100}% ${sampleProperty(c, "focusY", at) * 100}%`,
@@ -312,6 +354,7 @@ function StageLayer({
               }
             >
               <OffthreadVideo
+                transparent={asset.alpha === true}
                 src={asset.url}
                 muted
                 style={mediaStyle}
@@ -340,7 +383,9 @@ function StageLayer({
             style={mediaStyle}
           />
         )}
-        {(needsEffectCanvas(c.effects) || look.gl) && (
+        {(needsEffectCanvas(c.effects) ||
+          needsAdvancedPass(c.advanced) ||
+          look.gl) && (
           <EffectCanvas
             asset={asset}
             clip={c}

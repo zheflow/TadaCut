@@ -651,7 +651,7 @@ function StudioWindow({ frame }: { frame: number }) {
         </span>
         <span>4 个素材 · 4 个分镜</span>
         <span style={{ flex: 1 }} />
-        <span>TadaCut 0.1</span>
+        <span>TadaCut 0.2</span>
       </div>
     </div>
   );

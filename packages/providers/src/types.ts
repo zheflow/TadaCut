@@ -10,6 +10,11 @@ export const capabilities = [
   "voice-clone",
   "sfx",
   "voice-isolation",
+  "video-matte",
+  "video-inpaint",
+  "video-upscale",
+  "avatar",
+  "lip-sync",
   "ref-video",
   "image-edit",
   "stock",
@@ -106,6 +111,8 @@ export interface ChatMessage {
   toolCalls?: ToolCall[];
   toolCallId?: string;
   images?: string[];
+  /** Host-generated feedback must not be learned as a user preference. */
+  synthetic?: "feedback" | "summary";
 }
 export interface Completion {
   text: string;

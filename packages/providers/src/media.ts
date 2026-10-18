@@ -144,6 +144,7 @@ export async function cloneVoice(
 export async function transcribe(
   ctx: ProviderContext,
   audio: { bytes: Uint8Array; name: string; mime: string },
+  options: { prompt?: string } = {},
 ) {
   const form = new FormData();
   form.append(
@@ -153,6 +154,7 @@ export async function transcribe(
   );
   form.append("model", ctx.provider.models.transcription || ctx.provider.model);
   form.append("response_format", "verbose_json");
+  if (options.prompt) form.append("prompt", options.prompt);
   form.append("timestamp_granularities[]", "word");
   const h = headers(ctx);
   delete h["Content-Type"];

@@ -27,6 +27,8 @@ import {
 } from "./plugins";
 import { fetchPublic } from "./public-web";
 import type { Message, Repository } from "./storage";
+import { unloadSkill } from "./agent-state";
+import { cleanMemoryText, memoryKey } from "./agent-memory";
 
 const permission = z.enum(["allow", "ask", "deny"]);
 /** Routes for the agent, versions, trash, exports, extensions, fonts and online libraries. */
@@ -48,6 +50,18 @@ export function registerRoutes(
   app.get("/api/projects/:id/agent", async (request) =>
     agent.threadSummary(agent.thread(id(request))),
   );
+  app.get("/api/projects/:id/agent/state", async (request) =>
+    agent.workingState(id(request)),
+  );
+  app.post("/api/projects/:id/agent/compact", async (request) =>
+    agent.compactThread(id(request)),
+  );
+  app.post("/api/projects/:id/agent/skills/unload", async (request) => {
+    const { skillId } = z
+      .object({ skillId: z.string().min(1) })
+      .parse(request.body);
+    return unloadSkill({ repo, projectId: id(request), publish }, skillId);
+  });
   app.post("/api/projects/:id/agent/approve", async (request) => {
     const body = z
       .object({
@@ -65,6 +79,7 @@ export function registerRoutes(
       .object({
         providerId: z.string().optional(),
         mode: z.enum(["manual", "auto", "ask"]).optional(),
+        backend: z.enum(["api", "codex", "claude", "copilot"]).optional(),
         studioContext: studioContextSchema.optional(),
       })
       .parse(request.body ?? {});
@@ -74,6 +89,7 @@ export function registerRoutes(
         body.providerId,
         body.mode,
         body.studioContext,
+        body.backend,
       ),
     );
   });
@@ -123,6 +139,7 @@ export function registerRoutes(
           learnPreferences: z.boolean().optional(),
           verify: z.boolean().optional(),
           defaultMode: z.enum(["manual", "auto", "ask"]).optional(),
+          inputBudget: z.number().int().min(8000).max(64000).optional(),
         })
         .parse(request.body) as any,
     ),
@@ -154,9 +171,13 @@ export function registerRoutes(
         tags: z.array(z.string().max(30)).max(10).default([]),
       })
       .parse(request.body);
+    const text = cleanMemoryText(body.text),
+      duplicate = globalMemories({ repo }).find(
+        (m) => memoryKey(m.text) === memoryKey(text),
+      );
     const memory = repo.save<GlobalMemory>("memory", {
-      id: body.id ?? crypto.randomUUID(),
-      text: body.text,
+      id: body.id ?? duplicate?.id ?? crypto.randomUUID(),
+      text,
       tags: body.tags,
       source: "user",
       updatedAt: new Date().toISOString(),

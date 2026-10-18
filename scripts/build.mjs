@@ -6,7 +6,17 @@ import path from "node:path";
 import "./build-motion.mjs";
 import "./build-icons.mjs";
 const root = process.cwd();
+const manifest = JSON.parse(await fs.readFile("package.json", "utf8"));
 await viteBuild({ configFile: path.join(root, "apps/studio/vite.config.ts") });
+await build({
+  entryPoints: ["apps/team/src/main.ts"],
+  outfile: "dist/team/main.mjs",
+  bundle: true,
+  packages: "external",
+  platform: "node",
+  format: "esm",
+  target: "node22",
+});
 await build({
   entryPoints: ["apps/server/src/main.ts"],
   outfile: "dist/server/main.mjs",
@@ -49,7 +59,7 @@ await fs.writeFile(
   JSON.stringify(
     {
       name: "TadaCut",
-      version: "0.1.0",
+      version: manifest.version,
       builtAt: new Date().toISOString(),
       platform: process.platform,
       arch: process.arch,

@@ -1,3 +1,4 @@
+import { ApplyMediaResult } from "./AdvancedEditing";
 import { MotionLayer } from "../../../../packages/render/src/components/MotionLayer";
 import { motionTemplates } from "../../../../packages/motion/src/templates";
 import { JobResult } from "./JobResult";
@@ -143,6 +144,11 @@ const capNames: Record<Capability, string> = {
   music: "音乐",
   "voice-clone": "音色克隆",
   sfx: "音效",
+  "video-matte": "视频抠像",
+  "video-inpaint": "视频消除",
+  "video-upscale": "视频超分",
+  avatar: "数字人",
+  "lip-sync": "口型同步",
   "voice-isolation": "人声分离",
   "ref-video": "参考图生视频",
   "image-edit": "图片编辑",
@@ -637,6 +643,12 @@ export function ProjectsView() {
           <div className="button-group">
             <button
               className="secondary-button"
+              onClick={() => setState({ modal: "team" })}
+            >
+              团队与共享素材
+            </button>
+            <button
+              className="secondary-button"
               onClick={() => input.current?.click()}
             >
               <Upload size={14} />
@@ -936,6 +948,12 @@ export function LibraryView() {
   useEffect(() => describePage("library", { search, kind }), [search, kind]);
   return (
     <div className="page">
+      <button
+        className="secondary-button"
+        onClick={() => setState({ modal: "team" })}
+      >
+        团队素材目录
+      </button>
       <PageHeading
         eyebrow="YOUR MATERIALS"
         title="素材库"
@@ -1590,6 +1608,9 @@ export function TasksView() {
                 )}
               </div>
               <div className="task-actions">
+                {j.kind === "process-media" && j.status === "completed" && (
+                  <ApplyMediaResult jobId={j.id} projectId={j.projectId} />
+                )}
                 {j.status === "completed" && j.result?.url && (
                   <a className="secondary-button" href={j.result.url} download>
                     <Download size={13} />

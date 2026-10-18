@@ -1,3 +1,5 @@
+import { formatFrameTimecode, rationalFrameRate } from "./advanced";
+import { timelineProfileSchema } from "./advanced-model";
 import type { Command } from "./commands";
 import {
   activeTimeline,
@@ -18,7 +20,10 @@ const xml = (s: string) =>
         "'": "&apos;",
       })[c]!,
   );
-const seconds = (frames: number, fps: number) => `${frames}/${fps}s`;
+const seconds = (frames: number, fps: number) => {
+  const rate = rationalFrameRate(fps);
+  return `${Math.round(frames) * rate.denominator}/${rate.numerator}s`;
+};
 export function exportFcpxml(p: Project, t = activeTimeline(p)): string {
   const assets = p.assets.filter((a) =>
     t.clips.some((c) => c.assetId === a.id),
@@ -34,11 +39,11 @@ export function exportFcpxml(p: Project, t = activeTimeline(p)): string {
     .sort((a, b) => a.start - b.start)
     .map(
       (c) =>
-        `<asset-clip ref="${refs.get(c.assetId)}" name="${xml(c.name || p.assets.find((a) => a.id === c.assetId)?.name || "")}" offset="${seconds(c.start, t.fps)}" start="${Math.round(c.sourceOffset * t.fps)}/${t.fps}s" duration="${seconds(c.duration, t.fps)}" lane="${t.tracks.findIndex((tr) => tr.id === c.trackId)}"/>`,
+        `<asset-clip ref="${refs.get(c.assetId)}" name="${xml(c.name || p.assets.find((a) => a.id === c.assetId)?.name || "")}" offset="${seconds(c.start, t.fps)}" start="${seconds(Math.round(c.sourceOffset * t.fps), t.fps)}" duration="${seconds(c.duration, t.fps)}" lane="${t.tracks.findIndex((tr) => tr.id === c.trackId)}"/>`,
     )
     .join("");
   const duration = Math.max(1, ...t.clips.map((c) => c.start + c.duration));
-  return `<?xml version="1.0" encoding="UTF-8"?><fcpxml version="1.10"><resources><format id="r1" name="FFVideoFormat${t.height}p${t.fps}" frameDuration="1/${t.fps}s" width="${t.width}" height="${t.height}"/>${resources}</resources><library><event name="${xml(p.name)}"><project name="${xml(t.name)}"><sequence format="r1" duration="${seconds(duration, t.fps)}" tcStart="0s" tcFormat="NDF"><spine>${clips}</spine></sequence></project></event></library></fcpxml>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><fcpxml version="1.10"><resources><format id="r1" name="FFVideoFormat${t.height}p${t.fps}" frameDuration="${seconds(1, t.fps)}" width="${t.width}" height="${t.height}"/>${resources}</resources><library><event name="${xml(p.name)}"><project name="${xml(t.name)}"><sequence format="r1" duration="${seconds(duration, t.fps)}" tcStart="0s" tcFormat="${t.profile?.dropFrame ? "DF" : "NDF"}"><spine>${clips}</spine></sequence></project></event></library></fcpxml>`;
 }
 export function exportSrt(p: Project, t = activeTimeline(p)): string {
   const clock = (frame: number) => {
@@ -195,11 +200,33 @@ export function applyTimelineMarkdown(
         });
   return commands;
 }
-export function parseTimecode(tc: string, fps: number): number {
-  const parts = tc.trim().split(":").map(Number);
-  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n) || n < 0))
+export function parseTimecode(
+  tc: string,
+  fps: number,
+  dropFrame = tc.includes(";"),
+): number {
+  const parts = tc.trim().split(/[:;]/).map(Number),
+    nominal = Math.round(fps);
+  if (
+    parts.length !== 4 ||
+    parts.some((n) => !Number.isInteger(n) || n < 0) ||
+    parts[1] >= 60 ||
+    parts[2] >= 60 ||
+    parts[3] >= nominal
+  )
     throw new Error("时间码格式错误");
-  return ((parts[0] * 60 + parts[1]) * 60 + parts[2]) * fps + parts[3];
+  let frames =
+    ((parts[0] * 60 + parts[1]) * 60 + parts[2]) * nominal + parts[3];
+  if (dropFrame) {
+    const rate = rationalFrameRate(fps);
+    timelineProfileSchema.parse({ rate, dropFrame: true });
+    const drop = nominal === 60 ? 4 : 2,
+      minutes = parts[0] * 60 + parts[1];
+    if (parts[1] % 10 !== 0 && parts[2] === 0 && parts[3] < drop)
+      throw new Error("这是被跳过的丢帧时间码");
+    frames -= drop * (minutes - Math.floor(minutes / 10));
+  }
+  return frames;
 }
 export function importEdl(
   text: string,
@@ -214,11 +241,17 @@ export function importEdl(
     ),
     t = activeTimeline(p);
   t.fps = fps;
+  const dropFrame = /FCM:\s*DROP FRAME/i.test(text);
+  t.profile = timelineProfileSchema.parse({
+    rate: rationalFrameRate(fps),
+    dropFrame,
+  });
+  t.fps = t.profile.rate.numerator / t.profile.rate.denominator;
   const lines = text.split(/\r?\n/);
   let number = 0;
   for (let i = 0; i < lines.length; i++) {
     const match =
-      /^\s*(\d+)\s+(\S+)\s+([VA]+)\s+C\s+(\d\d:\d\d:\d\d:\d\d)\s+(\d\d:\d\d:\d\d:\d\d)\s+(\d\d:\d\d:\d\d:\d\d)\s+(\d\d:\d\d:\d\d:\d\d)/.exec(
+      /^\s*(\d+)\s+(\S+)\s+([VA]+)\s+C\s+(\d\d:\d\d:\d\d[:;]\d\d)\s+(\d\d:\d\d:\d\d[:;]\d\d)\s+(\d\d:\d\d:\d\d[:;]\d\d)\s+(\d\d:\d\d:\d\d[:;]\d\d)/.exec(
         lines[i],
       );
     if (!match) continue;
@@ -245,12 +278,13 @@ export function importEdl(
         id: clipId,
         assetId,
         trackId: match[3] === "A" ? t.tracks[1].id : t.tracks[0].id,
-        start: parseTimecode(match[6], fps),
+        start: parseTimecode(match[6], fps, dropFrame),
         duration: Math.max(
           1,
-          parseTimecode(match[7], fps) - parseTimecode(match[6], fps),
+          parseTimecode(match[7], fps, dropFrame) -
+            parseTimecode(match[6], fps, dropFrame),
         ),
-        sourceOffset: parseTimecode(match[4], fps) / fps,
+        sourceOffset: parseTimecode(match[4], fps, dropFrame) / fps,
         name,
       }),
     );
@@ -260,20 +294,13 @@ export function importEdl(
 }
 
 export function exportEdl(p: Project, t = activeTimeline(p)) {
-  const tc = (f: number) => {
-    const frames = Math.max(0, Math.round(f)),
-      total = Math.floor(frames / t.fps);
-    return [
-      Math.floor(total / 3600),
-      Math.floor(total / 60) % 60,
-      total % 60,
-      frames % t.fps,
-    ]
-      .map((n) => String(n).padStart(2, "0"))
-      .join(":");
-  };
+  const tc = (f: number) =>
+    formatFrameTimecode(
+      Math.round(f),
+      t.profile ?? { rate: rationalFrameRate(t.fps), dropFrame: false },
+    );
   return (
-    `TITLE: ${p.name} / ${t.name}\nFCM: NON-DROP FRAME\n\n` +
+    `TITLE: ${p.name} / ${t.name}\nFCM: ${t.profile?.dropFrame ? "DROP FRAME" : "NON-DROP FRAME"}\n\n` +
     [...t.clips]
       .filter((c) => {
         const a = p.assets.find((a) => a.id === c.assetId);

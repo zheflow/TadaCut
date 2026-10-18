@@ -112,6 +112,68 @@ const adGuide = file(
 
 const builtins: Builtin[] = [
   {
+    id: "advanced-cut",
+    name: "高级精剪",
+    category: "剪辑",
+    command: "advanced",
+    description: "曲线变速、倒放、定格、补帧、防抖、代理与预渲染",
+    prompt: `1. read_project 确认片段、素材与实际时长，read_app_context 确认用户引用。先明确要保留的画面和声音。
+2. 用 tool_search 查找 retime_clip、reverse_clip、freeze_clip、interpolate_clip、stabilize_clip 或 create_proxy 的准确参数；只选当前需要的处理。
+3. 处理产生候选任务；wait_for_job 等待后检查警告、时长、声音，再用 apply_media_result 应用。失败或过期结果不要声称已经修改。
+4. 手动模式整体进入草稿，一次确认与撤销；最后 read_project 检查时长和衔接。`,
+  },
+  {
+    id: "visual-finish",
+    name: "画面精修",
+    category: "画面",
+    command: "visual-finish",
+    description: "蒙版、跟踪、抠像、消除、RGB 曲线、HSL、人像与 HDR 色彩管理",
+    prompt: `1. 读取项目与目标片段，确定想改变的区域、跟踪对象和目标风格。
+2. 用 tool_search 按需查询 set_clip_masks、track_motion、set_color_curves、set_selective_hsl、set_portrait_adjustments、remove_background 或 inpaint_video。
+3. 人像区域由用户或明确坐标指定，不假称自动检测了人脸；低置信度跟踪要提示检查。AI 服务未配置时说明真实条件。
+4. 用 view_frames 查看效果；不可预览时如实报告。HDR 输出先检查 set_timeline_profile 和 export_video 的支持范围，复杂效果采用 SDR 合成须明确说明高光压缩。`,
+  },
+  {
+    id: "voice-lyrics",
+    name: "声音与歌词",
+    category: "音频",
+    command: "voice-lyrics",
+    description: "歌词识别、字幕文件、音高声像、数字人和口型同步",
+    prompt: `1. 确认音频、字幕文件或人物图像的引用；读取项目已有文稿。
+2. 用 tool_search 查找 import_subtitle_file、transcribe_lyrics、process_voice、create_avatar、sync_lips 的实际参数。字幕优先利用已有时间戳；不要把估算逐词时间说成识别结果。
+3. 数字人与口型同步先确认服务和输入素材。处理完成后检查时长与候选结果，apply_media_result 应用。录音和付费任务遵循宿主权限。`,
+  },
+  {
+    id: "team-review",
+    name: "团队协作与评审",
+    category: "工作室",
+    command: "team-review",
+    description: "团队连接、项目版本、共享目录、评审链接和时间点评论",
+    prompt: `1. tool_search 查找 read_team_space，确认真实连接、用户角色与项目访问权限。
+2. 根据需求查询 push_team_project、pull_team_project 或共享目录工具。上传前确认本地版本；下载历史版本会建立新项目，不覆盖未保存工作。
+3. 评审用 share_team_review 固定版本，发布链接仍需确认。评论使用明确时间点；关闭问题用 resolve_team_comment。不给自己扩大权限、不在对话输出成员凭据。`,
+  },
+  {
+    id: "canvas-plan",
+    name: "画布规划",
+    category: "创作",
+    command: "canvas-plan",
+    description: "画布节点、分组、素材引用、关系连线与批量整理",
+    prompt: `1. read_app_context 确认选中节点，tool_search 查找 query_canvas 读取真实节点与引用。
+2. 用 update_canvas_nodes、batch_canvas_operation 创建、分组和布局，保持素材引用有效，不制造循环分组。
+3. 批量修改使用同一事务，保留现有内容与历史。再次查询画布确认结构，并说明改变了哪些对象。`,
+  },
+  {
+    id: "camera-record",
+    name: "摄像与旁白",
+    category: "录制",
+    command: "camera-record",
+    description: "摄像头、旁白、屏幕录制与摄像头画中画",
+    prompt: `1. tool_search 查找 control_recording，先读 status；询问录制目标与是否包含麦克风。
+2. configure 录制类型与画中画位置后发起 start。原生设备、窗口选择和系统授权由用户完成；needs-user 不代表已经开始。
+3. stop 后检查录制素材是否实际保存，再按用户要求加入时间线；没有保存成功不能声称录制完成。`,
+  },
+  {
     id: "studio-manager",
     name: "工作室管家",
     category: "工作室",

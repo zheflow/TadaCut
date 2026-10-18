@@ -1,3 +1,4 @@
+import type { Project } from "@tadacut/domain";
 import crypto from "node:crypto";
 import type { Job, Repository } from "./storage";
 export function publicJob(job: Job): Job {
@@ -16,22 +17,42 @@ export class JobQueue {
   >();
   private handlers = new Map<string, (ctx: JobContext) => Promise<unknown>>();
   private closing = false;
+  private preparers = new Map<
+    string,
+    (
+      projectId: string,
+      input: Record<string, unknown>,
+      trustedProject?: Project,
+    ) => Record<string, unknown>
+  >();
   constructor(
     private repo: Repository,
     private publish: (type: string, data: unknown) => void,
     private concurrency = 2,
   ) {}
-  register(kind: string, handler: (ctx: JobContext) => Promise<unknown>) {
+  register(
+    kind: string,
+    handler: (ctx: JobContext) => Promise<unknown>,
+    prepare?: (
+      projectId: string,
+      input: Record<string, unknown>,
+      trustedProject?: Project,
+    ) => Record<string, unknown>,
+  ) {
     this.handlers.set(kind, handler);
+    if (prepare) this.preparers.set(kind, prepare);
   }
   enqueue(
     projectId: string,
     kind: string,
     label: string,
     input: Record<string, unknown>,
+    trustedProject?: Project,
   ) {
     if (!this.handlers.has(kind)) throw new Error("未知任务类型");
     this.repo.get(projectId);
+    input =
+      this.preparers.get(kind)?.(projectId, input, trustedProject) ?? input;
     const now = new Date().toISOString();
     const job: Job = {
       id: crypto.randomUUID(),

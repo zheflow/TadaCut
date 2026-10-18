@@ -248,6 +248,17 @@ export function renderSoundtrack() {
   );
   swish(cue("assistant", 18.2), 0.22, 35);
 
+  // Memory: an offered preference, explicit acceptance, then recall in a new project.
+  swish(cue("memory", 0) + 0.05, 0.2, 36);
+  ping(cue("memory", cues.memory.preference), 76, 0.14);
+  ping(cue("memory", cues.memory.candidate), 79, 0.15);
+  sfx.add(cue("memory", cues.memory.confirm), click(2300, 58), 0.25);
+  tones(barOf("memory", cues.memory.confirm), 76, 3).forEach((note) =>
+    chime(cue("memory", cues.memory.confirm), note, 0.12),
+  );
+  swish(cue("memory", cues.memory.recall), 0.18, 37);
+  chime(cue("memory", cues.memory.reply), 81, 0.17);
+
   // Features: a pass of air on every cut, ticks for marks and snaps.
   for (let i = 0; i < cues.features.count; i++) {
     const start = i * cues.features.length;

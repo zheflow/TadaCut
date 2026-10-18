@@ -18,6 +18,7 @@ import { ink, sans } from "./theme";
 import { Hook } from "./scenes/Hook";
 import { Logo } from "./scenes/Logo";
 import { Assistant } from "./scenes/Assistant";
+import { Memory } from "./scenes/Memory";
 import { Features } from "./scenes/Features";
 import { Models } from "./scenes/Models";
 import { Trust } from "./scenes/Trust";
@@ -28,6 +29,7 @@ const scenes: Record<SceneId, () => React.ReactNode> = {
   hook: Hook,
   logo: Logo,
   assistant: Assistant,
+  memory: Memory,
   features: Features,
   models: Models,
   trust: Trust,

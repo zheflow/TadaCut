@@ -1,3 +1,7 @@
+import {
+  registerRecordingControl,
+  type RecordingAction,
+} from "../lib/recording-control";
 import { useEffect, useRef, useState } from "react";
 import {
   AppWindow,
@@ -27,6 +31,13 @@ export function RecordingView() {
     [systemAudio, setSystemAudio] = useState(false),
     [recording, setRecording] = useState(false),
     [voiceOnly, setVoiceOnly] = useState(false),
+    [camera, setCamera] = useState(false),
+    [cameraOnly, setCameraOnly] = useState(false),
+    [cameraId, setCameraId] = useState(""),
+    [cameras, setCameras] = useState<MediaDeviceInfo[]>([]),
+    [cameraScale, setCameraScale] = useState(0.24),
+    [cameraPosition, setCameraPosition] = useState("bottom-right"),
+    [mirror, setMirror] = useState(true),
     [elapsed, setElapsed] = useState(0),
     [session, setSession] = useState<AutomationSession | null>(null),
     [target, setTarget] = useState(""),
@@ -39,8 +50,27 @@ export function RecordingView() {
     streams = useRef<MediaStream[]>([]),
     audio = useRef<AudioContext | null>(null),
     startTime = useRef(0),
-    sessionRef = useRef(session);
+    sessionRef = useRef(session),
+    animation = useRef(0),
+    controls = useRef<(action: RecordingAction) => Promise<unknown>>(
+      async () => ({}),
+    );
   sessionRef.current = session;
+  useEffect(
+    () => registerRecordingControl((action) => controls.current(action)),
+    [],
+  );
+  const loadCameras = async () => {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      setCameras(all.filter((d) => d.kind === "videoinput"));
+    } catch (e) {
+      notify(String(e), true);
+    }
+  };
+  useEffect(() => {
+    void loadCameras();
+  }, []);
   useEffect(() => {
     if (window.tadacut)
       void window.tadacut
@@ -59,6 +89,7 @@ export function RecordingView() {
   useEffect(
     () => () => {
       if (recorder.current?.state === "recording") recorder.current.stop();
+      cancelAnimationFrame(animation.current);
       streams.current.forEach((s) => s.getTracks().forEach((t) => t.stop()));
       void audio.current?.close();
       if (sessionRef.current)
@@ -82,28 +113,107 @@ export function RecordingView() {
       notify(String(e), true);
     }
   };
-  const start = async () => {
+  const start = async (override: Partial<RecordingAction> = {}) => {
+    const options = {
+      mode: voiceOnly
+        ? "voice"
+        : cameraOnly
+          ? "camera"
+          : camera
+            ? "screen-camera"
+            : "screen",
+      sourceId: source,
+      cameraId,
+      mic,
+      systemAudio,
+      cameraScale,
+      cameraPosition,
+      mirror,
+      ...override,
+    };
+    const voice = options.mode === "voice",
+      onlyCamera = options.mode === "camera",
+      withCamera = onlyCamera || options.mode === "screen-camera";
+    if (recorder.current?.state === "recording")
+      throw new Error("已经在录制中");
     try {
       const projectId = getState().project?.id;
       const automationId = sessionRef.current?.id;
       const owned: MediaStream[] = [];
       streams.current = owned;
       let capture: MediaStream;
-      if (voiceOnly)
+      if (voice)
         capture = await navigator.mediaDevices.getUserMedia({
           audio: true,
           video: false,
         });
+      else if (onlyCamera)
+        capture = await navigator.mediaDevices.getUserMedia({
+          video: options.cameraId
+            ? { deviceId: { exact: options.cameraId } }
+            : true,
+          audio: false,
+        });
       else {
-        if (window.tadacut && source) await window.tadacut.selectSource(source);
+        if (window.tadacut && options.sourceId)
+          await window.tadacut.selectSource(options.sourceId);
         capture = await navigator.mediaDevices.getDisplayMedia({
           video: { frameRate: 30 },
-          audio: systemAudio,
+          audio: options.systemAudio,
         });
       }
       owned.push(capture);
-      const tracks = [...capture.getVideoTracks()];
-      if (!voiceOnly && mic)
+      let picture = capture;
+      if (withCamera && !onlyCamera) {
+        const cam = await navigator.mediaDevices.getUserMedia({
+          video: options.cameraId
+            ? { deviceId: { exact: options.cameraId } }
+            : true,
+          audio: false,
+        });
+        owned.push(cam);
+        const screenVideo = document.createElement("video"),
+          cameraVideo = document.createElement("video");
+        screenVideo.muted = cameraVideo.muted = true;
+        screenVideo.srcObject = capture;
+        cameraVideo.srcObject = cam;
+        await Promise.all([screenVideo.play(), cameraVideo.play()]);
+        const canvas = document.createElement("canvas"),
+          settings = capture.getVideoTracks()[0].getSettings();
+        canvas.width = settings.width ?? 1280;
+        canvas.height = settings.height ?? 720;
+        const context = canvas.getContext("2d")!;
+        const draw = () => {
+          context.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+          const w = canvas.width * options.cameraScale,
+            h =
+              (w * (cameraVideo.videoHeight || 720)) /
+              (cameraVideo.videoWidth || 1280),
+            margin = canvas.width * 0.025,
+            x = options.cameraPosition.endsWith("right")
+              ? canvas.width - w - margin
+              : margin,
+            y = options.cameraPosition.startsWith("bottom")
+              ? canvas.height - h - margin
+              : margin;
+          context.save();
+          context.beginPath();
+          context.roundRect(x, y, w, h, Math.min(w, h) * 0.08);
+          context.clip();
+          if (options.mirror) {
+            context.translate(x + w, y);
+            context.scale(-1, 1);
+            context.drawImage(cameraVideo, 0, 0, w, h);
+          } else context.drawImage(cameraVideo, x, y, w, h);
+          context.restore();
+          animation.current = requestAnimationFrame(draw);
+        };
+        draw();
+        picture = canvas.captureStream(30);
+        owned.push(picture);
+      }
+      const tracks = [...picture.getVideoTracks()];
+      if (!voice && options.mic)
         owned.push(await navigator.mediaDevices.getUserMedia({ audio: true }));
       const inputs = owned.filter((s) => s.getAudioTracks().length);
       if (inputs.length > 1) {
@@ -116,7 +226,7 @@ export function RecordingView() {
       } else if (inputs[0]) tracks.push(...inputs[0].getAudioTracks());
       const output = new MediaStream(tracks);
       streams.current = owned;
-      const mime = voiceOnly
+      const mime = voice
         ? ["audio/webm;codecs=opus", "audio/webm"].find((m) =>
             MediaRecorder.isTypeSupported(m),
           )
@@ -136,13 +246,14 @@ export function RecordingView() {
       };
       mediaRecorder.onstop = async () => {
         setRecording(false);
+        cancelAnimationFrame(animation.current);
         owned.forEach((s) => s.getTracks().forEach((t) => t.stop()));
         await audio.current?.close();
         audio.current = null;
         if (video.current) video.current.srcObject = null;
         const file = new File(
           chunks,
-          `${voiceOnly ? "旁白" : "应用录制"}-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.webm`,
+          `${voice ? "旁白" : "应用录制"}-${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.webm`,
           { type: mediaRecorder.mimeType },
         );
         if (projectId) {
@@ -174,7 +285,7 @@ export function RecordingView() {
             if (mediaRecorder.state === "recording") mediaRecorder.stop();
           }),
       );
-      if (video.current && !voiceOnly) {
+      if (video.current && !voice) {
         video.current.srcObject = output;
         await video.current.play();
       }
@@ -184,8 +295,50 @@ export function RecordingView() {
       mediaRecorder.start(1000);
     } catch (e) {
       streams.current.forEach((s) => s.getTracks().forEach((t) => t.stop()));
+      cancelAnimationFrame(animation.current);
       notify(e instanceof Error ? e.message : String(e), true);
+      throw e;
     }
+  };
+  controls.current = async (action) => {
+    if (action.action === "status")
+      return {
+        recording: recorder.current?.state === "recording",
+        elapsed,
+        cameras: cameras.map((c) => ({ id: c.deviceId, name: c.label })),
+        sources,
+        mode: voiceOnly
+          ? "voice"
+          : cameraOnly
+            ? "camera"
+            : camera
+              ? "screen-camera"
+              : "screen",
+      };
+    if (action.action === "stop") {
+      if (recorder.current?.state !== "recording")
+        throw new Error("当前没有录制");
+      recorder.current.stop();
+      return { stopping: true };
+    }
+    if (recording) throw new Error("先停止录制再改设置");
+    if (action.mode) {
+      setVoiceOnly(action.mode === "voice");
+      setCameraOnly(action.mode === "camera");
+      setCamera(action.mode === "screen-camera");
+    }
+    if (action.sourceId !== undefined) setSource(action.sourceId);
+    if (action.cameraId !== undefined) setCameraId(action.cameraId);
+    if (action.mic !== undefined) setMic(action.mic);
+    if (action.systemAudio !== undefined) setSystemAudio(action.systemAudio);
+    if (action.cameraScale !== undefined) setCameraScale(action.cameraScale);
+    if (action.cameraPosition) setCameraPosition(action.cameraPosition);
+    if (action.mirror !== undefined) setMirror(action.mirror);
+    if (action.action === "start") {
+      await start(action);
+      return { recording: true };
+    }
+    return { configured: true };
   };
   const beginSession = async () => {
     if (!window.tadacut || !target) return;
@@ -240,7 +393,7 @@ export function RecordingView() {
               </span>
             )}
           </div>
-          {window.tadacut && !voiceOnly && (
+          {window.tadacut && !voiceOnly && !cameraOnly && (
             <div className="capture-sources">
               <select
                 value={source}
@@ -263,6 +416,99 @@ export function RecordingView() {
             </div>
           )}
           <div className="capture-options">
+            <label>
+              录制模式
+              <select
+                aria-label="录制模式"
+                disabled={recording}
+                value={
+                  voiceOnly
+                    ? "voice"
+                    : cameraOnly
+                      ? "camera"
+                      : camera
+                        ? "screen-camera"
+                        : "screen"
+                }
+                onChange={(e) => {
+                  setVoiceOnly(e.target.value === "voice");
+                  setCameraOnly(e.target.value === "camera");
+                  setCamera(e.target.value === "screen-camera");
+                }}
+              >
+                <option value="screen">屏幕</option>
+                <option value="screen-camera">屏幕 + 摄像头</option>
+                <option value="camera">仅摄像头</option>
+                <option value="voice">旁白</option>
+              </select>
+            </label>
+            {(camera || cameraOnly) && (
+              <>
+                <label>
+                  摄像头
+                  <select
+                    value={cameraId}
+                    disabled={recording}
+                    onChange={(e) => setCameraId(e.target.value)}
+                  >
+                    <option value="">系统默认</option>
+                    {cameras.map((c, i) => (
+                      <option key={c.deviceId || i} value={c.deviceId}>
+                        {c.label || `摄像头 ${i + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button disabled={recording} onClick={() => void loadCameras()}>
+                  刷新摄像头
+                </button>
+              </>
+            )}
+            {camera && (
+              <>
+                <label>
+                  画中画位置
+                  <select
+                    value={cameraPosition}
+                    disabled={recording}
+                    onChange={(e) => setCameraPosition(e.target.value)}
+                  >
+                    {[
+                      ["top-left", "左上"],
+                      ["top-right", "右上"],
+                      ["bottom-left", "左下"],
+                      ["bottom-right", "右下"],
+                    ].map(([v, n]) => (
+                      <option key={v} value={v}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  画中画大小
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="0.5"
+                    step="0.01"
+                    disabled={recording}
+                    value={cameraScale}
+                    onChange={(e) => setCameraScale(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={mirror}
+                    disabled={recording}
+                    onChange={(e) => setMirror(e.target.checked)}
+                  />
+                  镜像摄像头
+                </label>
+              </>
+            )}
+
             <label>
               <input
                 type="checkbox"
@@ -299,11 +545,12 @@ export function RecordingView() {
               recording ? "record-button stop" : "primary-button full-width"
             }
             disabled={
-              !recording && Boolean(window.tadacut && !voiceOnly && !source)
+              !recording &&
+              Boolean(window.tadacut && !voiceOnly && !cameraOnly && !source)
             }
             onClick={() => {
               if (recording) recorder.current?.stop();
-              else void start();
+              else void start().catch(() => {});
             }}
           >
             {recording ? (

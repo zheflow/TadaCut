@@ -198,6 +198,15 @@ export interface Message {
   proposalIds?: string[];
   createdAt: string;
   usage?: { input: number | null; output: number | null; reported?: boolean };
+  agentContext?: {
+    backend: string;
+    catalogTools: number;
+    offeredTools: number;
+    estimatedInputTokens: number;
+    compactions: number;
+    skills: string[];
+    memoryCount: number;
+  };
   mode?: "manual" | "auto" | "ask";
   steps?: AgentStep[];
   /** A tool call waiting for the user's approval. */

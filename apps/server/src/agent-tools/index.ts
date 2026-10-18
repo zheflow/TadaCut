@@ -1,3 +1,5 @@
+import { teamTools } from "./team";
+import { advancedTools } from "./advanced";
 import type { AgentTool } from "../../../../packages/agent/src/runner";
 import { publicJob } from "../jobs";
 import { readProjectParameters, readProjectView } from "../project-view";
@@ -15,8 +17,13 @@ import { timelineTools } from "./timeline";
 import { visualTools } from "./visual";
 import { wordTools } from "./words";
 import { applicationTools } from "./application";
+import { sessionTools } from "./session";
 
 export const groupLabels: Record<string, string> = {
+  team: "团队协作、远程项目、权限、版本、评审链接、共享模板贴纸与音频目录",
+  advanced:
+    "高级画面、曲线变速、倒放、补帧、蒙版、跟踪、抠像、消除、数字人、HDR、歌词、代理",
+  canvas: "画布分组、素材引用、历史、批量操作",
   timeline: "剪辑",
   transcript: "文稿",
   captions: "字幕",
@@ -215,6 +222,8 @@ export function buildTools(
     ...coreTools(h, options.desktopSession),
     ...applicationTools(h),
     ...timelineTools(h),
+    ...advancedTools(h),
+    ...teamTools(h),
     ...wordTools(h),
     ...audioTools(h),
     ...visualTools(h),
@@ -225,6 +234,7 @@ export function buildTools(
     ...exportTools(h),
     ...projectTools(h),
     ...skillTools(h, options.spawn, options.depth),
+    ...sessionTools(h),
   ];
 }
 export type { ToolHost } from "./host";

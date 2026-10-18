@@ -133,8 +133,8 @@ export function sliceKeyframes(
 }
 export const formatTime = (frame: number, fps = 30) => {
   const total = Math.max(0, Math.floor(frame)),
-    seconds = Math.floor(total / fps);
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}:${String(total % fps).padStart(2, "0")}`;
+    seconds = Math.floor(total / Math.round(fps));
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}:${String(total % Math.round(fps)).padStart(2, "0")}`;
 };
 export function focusFromClicks(
   clicks: { time: number; x: number; y: number }[],

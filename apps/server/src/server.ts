@@ -1,3 +1,6 @@
+import { registerTeamRoutes } from "./team-client";
+import { registerAdvancedRoutes } from "./advanced-routes";
+import { registerMediaProcessing } from "./media-processing";
 import { capcutEntry } from "./capcut";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
@@ -140,6 +143,7 @@ export async function createStudioServer(options: ServerOptions) {
     artifactsDir,
     artifacts,
   });
+  registerMediaProcessing({ repo, jobs, media, agent, root: options.root });
   await app.register(cookie);
   await app.register(multipart, {
     limits: { files: 1, fileSize: 512 * 1024 * 1024 },
@@ -600,6 +604,14 @@ export async function createStudioServer(options: ServerOptions) {
     publish: events.publish,
     dataDir: options.dataDir,
     root: options.root,
+  });
+  registerAdvancedRoutes(app, { repo, jobs, publish: events.publish });
+  registerTeamRoutes(app, {
+    repo,
+    media,
+    dataDir: options.dataDir,
+    artifactsDir,
+    publish: events.publish,
   });
   mountMcp(app, repo, agent);
   await app.register(staticFiles, {

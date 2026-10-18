@@ -16,14 +16,19 @@ await fs.writeFile(
   `#!/usr/bin/env node
 const readline = require('node:readline');
 const send = value => process.stdout.write(JSON.stringify(value) + '\\n');
+let prompt = '';
 readline.createInterface({ input: process.stdin }).on('line', line => {
   const event = JSON.parse(line);
   if (event.id !== undefined && event.method) {
     send({ id: event.id, result: event.method === 'thread/start' ? { thread: { id: 'fixture-thread' } } : event.method === 'account/read' ? { account: { type: 'chatgpt' }, requiresOpenaiAuth: true } : {} });
     if (event.method === 'turn/start') {
-      const prompt = event.params.input[0].text;
-      send({ id: 777, method: 'item/tool/call', params: { tool: 'update_app_settings', arguments: { name: prompt.includes('拒绝') ? '不应保存' : '外部确认工作室' } } });
+      prompt = JSON.parse(event.params.input[0].text.trim().split('\\n').at(-1)).content;
+      send({ id: 775, method: 'item/tool/call', params: { tool: 'load_skill', arguments: { skillId: 'studio-manager' } } });
     }
+  } else if (event.id === 775) {
+    send({ id: 776, method: 'item/tool/call', params: { tool: 'tool_search', arguments: { query: 'update_app_settings' } } });
+  } else if (event.id === 776) {
+    send({ id: 777, method: 'item/tool/call', params: { tool: 'call_tool', arguments: { name: 'update_app_settings', arguments: { name: prompt.includes('拒绝') ? '不应保存' : '外部确认工作室' } } } });
   } else if (event.id === 777) {
     send({ method: 'item/agentMessage/delta', params: { delta: event.result.success ? '外部验证已执行' : '外部验证已拒绝' } });
     send({ method: 'turn/completed', params: { turn: { status: 'completed' } } });
@@ -63,74 +68,126 @@ const fixture = createServer(async (req, res) => {
       history.filter((m) => m.role === "tool").map((m) => m.tool_call_id),
     );
     const references = context?.references ?? [];
-    const operations = message.includes("验证素材")
+    const working = history
+      .filter((m) => m.role === "tool")
+      .map((m) => {
+        try {
+          return JSON.parse(m.content);
+        } catch {
+          return null;
+        }
+      })
+      .find(
+        (value) =>
+          Array.isArray(value?.loadedSkills) &&
+          typeof value.revision === "number",
+      );
+    const operations = message.includes("验证计划")
       ? [
+          ["read_agent_state", {}],
           [
-            "organize_assets",
+            "update_agent_plan",
             {
-              assetIds: references
-                .filter((r) => r.kind === "asset")
-                .map((r) => r.id),
-              tags: ["春日精选"],
-              description: "多选素材的对话整理",
+              expectedRevision: working?.revision ?? 0,
+              goal: "核对工作区与恢复任务",
+              constraints: ["保留原声"],
+              steps: [
+                { id: "load", title: "加载工作流", status: "completed" },
+                { id: "check", title: "核对工作区", status: "in_progress" },
+              ],
+              notes: "接下来检查时间线与字幕",
+            },
+          ],
+          [
+            "remember",
+            {
+              scope: "global",
+              text: "基础验证：字幕使用白色",
+              tags: ["基础验证"],
+            },
+          ],
+          [
+            "remember",
+            {
+              scope: "project",
+              text: "基础验证：保留开头镜头",
+              tags: ["基础验证"],
             },
           ],
         ]
-      : message.includes("验证设置")
+      : message.includes("验证素材")
         ? [
             [
-              "update_app_settings",
-              { name: "樱花工作室", agent: { verify: false } },
+              "organize_assets",
+              {
+                assetIds: references
+                  .filter((r) => r.kind === "asset")
+                  .map((r) => r.id),
+                tags: ["春日精选"],
+                description: "多选素材的对话整理",
+              },
             ],
-            ["set_app_appearance", { theme: "light", sakuraEffects: false }],
           ]
-        : message.includes("验证技能")
+        : message.includes("验证设置")
           ? [
               [
-                "configure_skill",
-                {
-                  skillId: references.find((r) => r.kind === "skill")?.id,
-                  patch: { enabled: false },
-                },
+                "update_app_settings",
+                { name: "樱花工作室", agent: { verify: false } },
               ],
+              ["set_app_appearance", { theme: "light", sakuraEffects: false }],
             ]
-          : message.includes("验证模型")
+          : message.includes("验证技能")
             ? [
                 [
-                  "configure_provider",
+                  "configure_skill",
                   {
-                    providerId: "fixture-chat",
-                    patch: { model: "fixture-changed" },
+                    skillId: references.find((r) => r.kind === "skill")?.id,
+                    patch: { enabled: false },
                   },
                 ],
               ]
-            : message.includes("验证故事")
+            : message.includes("验证模型")
               ? [
                   [
-                    "navigate_app",
+                    "configure_provider",
                     {
-                      page: "studio",
-                      workspace: "story",
-                      storyView: "development",
+                      providerId: "fixture-chat",
+                      patch: { model: "fixture-changed" },
                     },
                   ],
                 ]
-              : message.includes("验证文件")
-                ? [["choose_local_files", { kind: "media" }]]
-                : message.includes("验证目录")
-                  ? [
-                      [
-                        "set_workspace_view",
-                        { leftPanel: "library", resourceSection: "captions" },
-                      ],
-                    ]
-                  : [];
-    const sequence = [
-      ["tool_search", { query: "media application" }],
-      ["read_project", {}],
-      ["read_app_context", {}],
-      ...operations,
-    ];
+              : message.includes("验证故事")
+                ? [
+                    [
+                      "navigate_app",
+                      {
+                        page: "studio",
+                        workspace: "story",
+                        storyView: "development",
+                      },
+                    ],
+                  ]
+                : message.includes("验证文件")
+                  ? [["choose_local_files", { kind: "media" }]]
+                  : message.includes("验证目录")
+                    ? [
+                        [
+                          "set_workspace_view",
+                          { leftPanel: "library", resourceSection: "captions" },
+                        ],
+                      ]
+                    : [];
+    const sequence = system.startsWith("把对话整理为工作摘要")
+      ? []
+      : [
+          ["load_skill", { skillId: "studio-manager" }],
+          ["read_project", {}],
+          ["read_app_context", {}],
+          ...operations.flatMap((op) => [
+            ["tool_search", { query: op[0] }],
+            op,
+          ]),
+        ];
     const index = sequence.findIndex(
       (_entry, i) => !completed.has(`fixture-${i}`),
     );
@@ -179,9 +236,17 @@ try {
       `--user-data-dir=${path.join(dataDir, "profile")}`,
     ],
     env,
-    timeout: 30000,
+    timeout: packaged ? 120000 : 30000,
   });
-  const page = await application.firstWindow();
+  const page = await application.firstWindow({
+    timeout: packaged ? 120000 : 30000,
+  });
+  // Keep physical mouse movement from mixing with CDP drags on the shared desktop.
+  // This affects only the disposable test window; Playwright still drives the real UI.
+  await application.evaluate(({ BrowserWindow }) => {
+    for (const window of BrowserWindow.getAllWindows())
+      window.setIgnoreMouseEvents(true);
+  });
   assert.equal(
     await application.evaluate(() => process.env.TADACUT_CODEX_PATH),
     path.join(runtimeBin, "codex"),
@@ -362,6 +427,16 @@ try {
         await page.mouse.down();
         await page.mouse.move(resizer.x + 350, resizer.y - 160, { steps: 5 });
         await page.mouse.up();
+        await wait(async () => {
+          const bounds = await page.locator(".timeline-editor").boundingBox();
+          return bounds.height >= 440;
+        });
+        assert.equal(
+          await page
+            .getByTitle("选择工具（V）", { exact: true })
+            .getAttribute("aria-checked"),
+          "true",
+        );
         const clips = page.locator(".timeline-clip.image");
         await clips.nth(0).click({ position: { x: 60, y: 20 } });
         await clips
@@ -379,11 +454,12 @@ try {
         await page.mouse.move(from.x + 60, from.y + 20);
         await page.mouse.down();
         await page.mouse.move(from.x + 60, to.y + to.height / 2, { steps: 12 });
-        assert.equal(await page.locator(".track-row.drop-valid").count(), 1);
+        await page.locator(".track-row.drop-valid").waitFor();
         assert(
           (await page.locator(".drop-guide").innerText()).includes("2 个片段"),
         );
         await screenshot("multi-drag");
+        await page.mouse.move(from.x + 60, to.y + to.height / 2);
         await page.mouse.up();
         await changed(p.revision);
         let after = await project();
@@ -589,6 +665,72 @@ try {
       assert.equal(hit, "TEXTAREA");
       await page.locator(".modal").getByTitle("关闭", { exact: true }).click();
     });
+    await step("任务计划与技能在压缩、重载后保留，可主动卸载", async () => {
+      await send("验证计划，并记住字幕使用白色和保留开头镜头");
+      await page.getByTitle("管理上下文", { exact: true }).click();
+      const panel = page.getByRole("region", { name: "上下文管理" });
+      await wait(async () =>
+        (await panel.innerText()).includes("核对工作区与恢复任务"),
+      );
+      assert((await panel.innerText()).includes("工作室管家"));
+      const before = (await api("GET", "/api/projects/demo-city/agent"))
+        .compactions;
+      await panel
+        .getByRole("button", { name: "压缩旧对话", exact: true })
+        .click();
+      await wait(
+        async () =>
+          (await api("GET", "/api/projects/demo-city/agent")).compactions >
+          before,
+      );
+      await page.reload();
+      await page.getByTitle("管理上下文", { exact: true }).click();
+      await wait(async () =>
+        (await panel.innerText()).includes("核对工作区与恢复任务"),
+      );
+      assert((await panel.innerText()).includes("工作室管家"));
+      await screenshot("working-context");
+      await panel.getByTitle("卸载技能 工作室管家", { exact: true }).click();
+      await wait(
+        async () =>
+          (await api("GET", "/api/projects/demo-city/agent/state")).loadedSkills
+            .length === 0,
+      );
+      await page.getByTitle("管理上下文", { exact: true }).click();
+    });
+    await step("上下文预算可配置，长期与项目记忆可搜索编辑", async () => {
+      await nav("设置");
+      const budget = page.getByLabel("上下文预算", { exact: true });
+      await budget.fill("20000");
+      await budget.press("Tab");
+      await wait(
+        async () =>
+          (await api("GET", "/api/agent/settings")).inputBudget === 20000,
+      );
+      const search = page.getByLabel("搜索记忆", { exact: true });
+      await search.fill("基础验证");
+      await page.getByTitle("编辑长期偏好", { exact: true }).click();
+      await page
+        .getByRole("textbox", { name: "编辑长期偏好", exact: true })
+        .fill("基础验证：字幕使用白色描边");
+      await page.getByRole("button", { name: "确定", exact: true }).click();
+      await wait(async () =>
+        (await api("GET", "/api/memories")).some(
+          (m) => m.text === "基础验证：字幕使用白色描边",
+        ),
+      );
+      await page.getByTitle("编辑项目约定", { exact: true }).click();
+      await page
+        .getByRole("textbox", { name: "编辑项目约定", exact: true })
+        .fill("基础验证：保留开头三秒镜头");
+      await page.getByRole("button", { name: "确定", exact: true }).click();
+      await wait(async () =>
+        (await project()).memories.some(
+          (m) => m.text === "基础验证：保留开头三秒镜头",
+        ),
+      );
+      await screenshot("memory-management");
+    });
     await step(
       "外部运行时也能管理应用，实际确认与拒绝均生效（模拟 Codex 协议）",
       async () => {
@@ -669,6 +811,21 @@ try {
       await page.getByLabel("展开创作助手", { exact: true }).click();
       assert.equal(await page.locator(".agent-messages").innerText(), text);
       await screenshot("small");
+    });
+    await step("按需技能与上下文明细可见，外部仅发送 8 个入口", async () => {
+      await page
+        .locator(".agent-context-details")
+        .last()
+        .locator("summary")
+        .click();
+      const detail = await page
+        .locator(".agent-context-details")
+        .last()
+        .innerText();
+      assert(detail.includes("8 个工具定义"));
+      assert(detail.includes("工作室管家"));
+      assert(requests.every((request) => (request.tools ?? []).length <= 24));
+      await screenshot("context-budget");
     });
     assert.deepEqual(errors, []);
     await fs.writeFile(

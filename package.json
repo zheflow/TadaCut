@@ -1,6 +1,6 @@
 {
   "name": "tadacut",
-  "version": "0.1.0",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
   "description": "An AI video studio on your computer. Say it. Make it.",
@@ -30,7 +30,9 @@
     "test:ui": "node scripts/smoke-ui.mjs",
     "promo": "tsx promo/render.ts",
     "sample-art": "tsx promo/sample-art.ts && prettier --write apps/server/src/sample-art.ts",
-    "test:shaders": "node --experimental-strip-types scripts/verify-shaders.ts"
+    "test:shaders": "node --experimental-strip-types scripts/verify-shaders.ts",
+    "team:dev": "tsx apps/team/src/main.ts",
+    "team:start": "node dist/team/main.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
@@ -47,7 +49,8 @@
     "react": "19.3.0",
     "remotion": "4.0.535",
     "sharp": "0.35.5",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "3.25.2"
   },
   "devDependencies": {
     "@babel/standalone": "^7.28.4",
@@ -105,7 +108,8 @@
         "NSMicrophoneUsageDescription": "Record voiceovers for your project.",
         "NSAudioCaptureUsageDescription": "Include application audio in your recordings.",
         "NSScreenCaptureUsageDescription": "Record a screen or application selected by you.",
-        "NSAppleEventsUsageDescription": "Operate applications in an automation session started by you."
+        "NSAppleEventsUsageDescription": "Operate applications in an automation session started by you.",
+        "NSCameraUsageDescription": "Record camera video or a camera overlay selected by you."
       },
       "icon": "build/icon.png",
       "identity": "-",

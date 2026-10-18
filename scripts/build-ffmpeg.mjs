@@ -36,6 +36,8 @@ const configure = [
   "--disable-shared",
   ...(process.platform === "darwin"
     ? [
+        "--enable-videotoolbox",
+        "--enable-audiotoolbox",
         `--extra-cflags=-mmacosx-version-min=${minimum}`,
         `--extra-ldflags=-mmacosx-version-min=${minimum}`,
       ]

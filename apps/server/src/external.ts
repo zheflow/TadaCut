@@ -7,6 +7,7 @@ import { createInterface } from "node:readline";
 import type { AgentTool } from "../../../packages/agent/src/runner";
 import { executable, executableEnvironment } from "./process";
 import { serveExternalTools } from "./external-mcp";
+import { modelToolResult } from "../../../packages/agent/src/output";
 import {
   reportedRuntimeUsage,
   unknownRuntimeUsage,
@@ -181,11 +182,19 @@ async function codex(options: Options) {
       try {
         const tool = options.tools.find((t) => t.name === event.params.tool);
         if (!tool) throw new Error("工具不在授权目录中");
-        const result = await tool.execute(event.params.arguments);
+        const result = modelToolResult(
+          await tool.execute(event.params.arguments),
+        );
         send({
           id: event.id,
           result: {
-            contentItems: [{ type: "inputText", text: JSON.stringify(result) }],
+            contentItems: [
+              { type: "inputText", text: result.text },
+              ...result.images.map((imageUrl) => ({
+                type: "inputImage",
+                imageUrl,
+              })),
+            ],
             success: true,
           },
         });
@@ -385,7 +394,18 @@ async function copilot(options: Options) {
         defineTool(t.name, {
           description: t.description,
           parameters: t.parameters as any,
-          handler: async (args: unknown) => t.execute(args),
+          handler: async (args: unknown) => {
+            const result = modelToolResult(await t.execute(args));
+            return {
+              resultType: "success" as const,
+              textResultForLlm: result.text,
+              binaryResultsForLlm: result.images.map((image) => ({
+                type: "image" as const,
+                mimeType: image.slice(5, image.indexOf(";")),
+                data: image.slice(image.indexOf(",") + 1),
+              })),
+            };
+          },
         }),
       ),
       onPermissionRequest: async () => ({ kind: "reject" as const }),

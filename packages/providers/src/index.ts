@@ -3,3 +3,4 @@ export * from "./chat";
 export * from "./media";
 export * from "./services";
 export * from "./presets";
+export * from "./advanced-media";

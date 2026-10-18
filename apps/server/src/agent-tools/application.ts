@@ -59,6 +59,36 @@ export function applicationTools(h: ToolHost): AgentTool[] {
   ) => tool("application", effect, name, description, parameters, execute);
   const ref = { projectId: s.string("目标项目 ID；不填为当前对话的项目") };
   return [
+    make(
+      "control_recording",
+      "external",
+      "配置、开始或停止屏幕、摄像头、画中画或旁白录制；原生系统权限仍由用户授权。status 返回当前设备和录制状态。",
+      s.object(
+        {
+          action: s.string(undefined, ["status", "configure", "start", "stop"]),
+          mode: s.string(undefined, [
+            "screen",
+            "camera",
+            "screen-camera",
+            "voice",
+          ]),
+          sourceId: s.string(),
+          cameraId: s.string(),
+          mic: s.boolean(),
+          systemAudio: s.boolean(),
+          cameraScale: s.number(),
+          cameraPosition: s.string(undefined, [
+            "top-left",
+            "top-right",
+            "bottom-left",
+            "bottom-right",
+          ]),
+          mirror: s.boolean(),
+        },
+        ["action"],
+      ),
+      (a) => control({ ...a, type: "recording" }),
+    ),
     tool(
       "core",
       "read",
@@ -345,7 +375,7 @@ export function applicationTools(h: ToolHost): AgentTool[] {
       s.object({
         name: s.string(),
         agent: s.record(
-          "defaultMode、verify、learnPreferences、permissions 的部分字段",
+          "defaultMode、verify、learnPreferences、inputBudget（8000–64000）、permissions 的部分字段",
         ),
       }),
       async (a) => {

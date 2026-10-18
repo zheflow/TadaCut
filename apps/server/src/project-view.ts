@@ -88,6 +88,9 @@ export function compactAsset(a: Asset) {
     ...(a.code ? { codeChars: a.code.length } : {}),
     ...(a.text ? { text: a.text.slice(0, 200) } : {}),
     ...(a.timecode ? { timecode: a.timecode } : {}),
+    ...(a.colorSpace ? { colorSpace: a.colorSpace } : {}),
+    ...(a.proxy ? { proxy: true } : {}),
+    ...(a.provenance ? { processing: a.provenance.operation } : {}),
   };
 }
 const timelineMeta = (t: Timeline) => ({
@@ -96,6 +99,7 @@ const timelineMeta = (t: Timeline) => ({
   width: t.width,
   height: t.height,
   fps: t.fps,
+  ...(t.profile ? { profile: t.profile } : {}),
   durationFrames: durationInFrames(t),
   background: t.background,
 });

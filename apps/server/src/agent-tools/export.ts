@@ -56,6 +56,9 @@ export function exportTools(h: ToolHost): AgentTool[] {
         ]),
         crf: s.integer(),
         transparent: s.boolean(),
+        allowSdrComposite: s.boolean(
+          "仅在用户接受高光压缩时，允许 SDR 特效合成后转换目标色彩空间",
+        ),
         fromSeconds: s.number(),
         toSeconds: s.number(),
         timelineId: s.string(),
@@ -66,6 +69,7 @@ export function exportTools(h: ToolHost): AgentTool[] {
           codec: a.codec ?? "h264",
           crf: a.crf ?? 20,
           transparent: a.transparent === true,
+          allowSdrComposite: a.allowSdrComposite === true,
           timelineId: tl.id,
           ...(a.fromSeconds !== undefined || a.toSeconds !== undefined
             ? {

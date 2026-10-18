@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { post, type Message } from "../lib/api";
 import { RuntimeConnection } from "./RuntimeConnection";
+import { AgentContext } from "./AgentContext";
 import { agentApi, commandNames, type AgentMode } from "../lib/studio-api";
 import {
   getState,
@@ -166,6 +167,7 @@ export function AgentPanel() {
   const context = currentStudioContext();
   const [text, updateText] = useState(() => getState().agentDrafts[p.id] ?? ""),
     [modelsOpen, setModelsOpen] = useState(false),
+    [contextOpen, setContextOpen] = useState(false),
     [commandIndex, setCommandIndex] = useState(0);
   const setText = (value: string) => {
     updateText(value);
@@ -267,6 +269,14 @@ export function AgentPanel() {
           </div>
           <button
             className="icon-button"
+            title="管理上下文"
+            aria-expanded={contextOpen}
+            onClick={() => setContextOpen(!contextOpen)}
+          >
+            <Layers size={14} />
+          </button>
+          <button
+            className="icon-button"
             title="新对话（未确认的草稿会先整理成方案）"
             disabled={
               Boolean(running) || (!messages.length && !thread?.messages)
@@ -298,6 +308,9 @@ export function AgentPanel() {
             : ""}
         </span>
       </div>
+      {contextOpen && (
+        <AgentContext projectId={p.id} running={Boolean(running)} />
+      )}
       <div className="agent-messages">
         {!messages.length && (
           <>
@@ -443,17 +456,41 @@ export function AgentPanel() {
             )}
             {m.approval && <ApprovalCard m={m} busy={Boolean(running)} />}
             {m.usage && (
-              <div className="message-usage">
+              <div
+                className="message-usage"
+                title="本轮多次模型请求的累计 token 用量，不是单次上下文大小"
+              >
                 {m.usage.input === null || m.usage.output === null ? (
                   "运行时未提供用量"
                 ) : (
                   <>
                     {m.usage.reported ? "" : "约 "}
-                    {m.usage.input.toLocaleString()} 输入 ·{" "}
-                    {m.usage.output.toLocaleString()} 输出
+                    {m.usage.input.toLocaleString()} 累计输入 ·{" "}
+                    {m.usage.output.toLocaleString()} 累计输出
                   </>
                 )}
               </div>
+            )}
+            {m.agentContext && (
+              <details className="message-usage agent-context-details">
+                <summary>上下文与技能</summary>
+                <div>
+                  本次发送 {m.agentContext.offeredTools} 个工具定义，完整目录{" "}
+                  {m.agentContext.catalogTools} 项
+                </div>
+                <div>
+                  应用上下文约{" "}
+                  {m.agentContext.estimatedInputTokens.toLocaleString()} tokens
+                  · 已压缩 {m.agentContext.compactions} 次
+                </div>
+                <div>
+                  加载技能：{m.agentContext.skills.join("、") || "未加载"} ·
+                  预载记忆 {m.agentContext.memoryCount} 条
+                </div>
+                {m.agentContext.backend !== "api" && (
+                  <div>CLI 会话内的压缩由该运行时管理</div>
+                )}
+              </details>
             )}
           </div>
         ))}
